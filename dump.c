@@ -387,7 +387,7 @@ void dirconDumpMesg(const struct timeval *pTs, Server *server, const DirconSessi
         fmtBufInit(fmtBuf, dumpStrBuf, sizeof (dumpStrBuf));
 
         tvSub(&relTs, pTs, &server->baseTime);
-        fmtBufAppend(fmtBuf, "%s: %d.%06d %s\n", fmtMesgDir(dir), (int) relTs.tv_sec, (int) relTs.tv_usec, fmtDirconSessId(sess->sessId));
+        fmtBufAppend(fmtBuf, "%s: %d.%06d\n", fmtMesgDir(dir), (int) relTs.tv_sec, (int) relTs.tv_usec);
         fmtBufAppend(fmtBuf, "mesgId: %s (0x%02x)\n", fmtMesgId(mesg->mesgId), mesg->mesgId);
         fmtBufAppend(fmtBuf, "seqNum: %u\n", mesg->seqNum);
         if (mesgType == response) {

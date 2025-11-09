@@ -60,7 +60,7 @@ static const time_t fitEpoch = 631065600;
 static void fitRecToTrkPt(const FIT_RECORD_MESG *record, TrkPt *tp)
 {
     if (record->timestamp != FIT_DATE_TIME_INVALID) {
-        tp->timestamp = (double) ((time_t) record->timestamp + fitEpoch);   // in s since UTC Epoch
+        tp->timestamp = (time_t) record->timestamp + fitEpoch;   // in s since UTC Epoch
     }
 
     if (record->cadence != FIT_UINT8_INVALID) {
@@ -75,7 +75,7 @@ static void fitRecToTrkPt(const FIT_RECORD_MESG *record, TrkPt *tp)
         tp->power = record->power;
     }
 
-    //mlog(debug, "timestamp=%ld cadence=%u heartRate=%u power=%u",
+    //mlog(info, "timestamp=%ld cadence=%u heartRate=%u power=%u",
     //        tp->timestamp, tp->cadence, tp->heartRate, tp->power);
 }
 
@@ -231,21 +231,6 @@ Service *serverFindService(const Server *server, const Uuid128 *uuid)
     }
 
     return svc;
-}
-
-DirconSessId swapDirconSessId(DirconSessId sessId)
-{
-    return (sessId == app) ? dev : app;
-}
-
-const char *fmtDirconSessId(DirconSessId sessId)
-{
-    if (sessId == app)
-        return "app";
-    else if (sessId == dev)
-        return "dev";
-
-    return "???";
 }
 
 const char *fmtSockaddr(const struct sockaddr_in *sockAddr, bool printPort)
@@ -418,10 +403,7 @@ int serverInit(Server *server)
 
     TAILQ_INIT(&server->svcList);
 
-    for (DirconSessId sessId = app; sessId <= dev; sessId++) {
-        server->dirconSession[sessId].sessId = sessId;
-        server->dirconSession[sessId].lastTxReqSeqNum = 0xff;
-    }
+    server->dirconSession.lastTxReqSeqNum = 0xff;
 
 #ifdef CONFIG_FIT_ACTIVITY_FILE
     TAILQ_INIT(&server->trkPtList);
@@ -456,7 +438,7 @@ int serverInit(Server *server)
 
 static int serverProcConnReq(Server *server)
 {
-    DirconSession *sess = &server->dirconSession[app];
+    DirconSession *sess = &server->dirconSession;
     int cliSockFd;
     socklen_t addrLen = sizeof (sess->remCliAddr);
 
@@ -489,7 +471,7 @@ static int serverProcConnReq(Server *server)
 
         inet_ntop(AF_INET, &sess->remCliAddr.sin_addr, remAddrBuf, sizeof (remAddrBuf));
         inet_ntop(AF_INET, &sess->locCliAddr.sin_addr, locAddrBuf, sizeof (locAddrBuf));
-        mlog(info, "Client connection established: %s[%u] -> %s[%u]",
+        mlog(info, "Client app connection established: %s[%u] -> %s[%u]",
                 remAddrBuf, ntohs(sess->remCliAddr.sin_port),
                 locAddrBuf, ntohs(sess->locCliAddr.sin_port));
 
@@ -506,11 +488,11 @@ static int serverProcConnReq(Server *server)
     return 0;
 }
 
-int serverProcConnDrop(Server *server, DirconSessId sessId)
+int serverProcConnDrop(Server *server)
 {
-    DirconSession *sess = &server->dirconSession[sessId];
+    DirconSession *sess = &server->dirconSession;
 
-    mlog(info, "Client disconnected!");
+    mlog(info, "Client app disconnected!");
 
     // Dis-arm the DIRCON timers
     sess->nextNotification.tv_sec = 0;
@@ -556,8 +538,8 @@ int serverRun(Server *server)
         pollFdSet[numFds++].revents = 0;
 
         // App client socket input
-        if (server->dirconSession[app].cliSockFd) {
-            pollFdSet[numFds].fd = server->dirconSession[app].cliSockFd;
+        if (server->dirconSession.cliSockFd) {
+            pollFdSet[numFds].fd = server->dirconSession.cliSockFd;
             pollFdSet[numFds].events = POLLIN | POLLRDHUP;
             pollFdSet[numFds++].revents = 0;
         }
@@ -615,13 +597,13 @@ int serverRun(Server *server)
                     if (fd == server->srvSockFd) {
                         // Process connection request
                         serverProcConnReq(server);
-                    } else if (fd == server->dirconSession[app].cliSockFd) {
+                    } else if (fd == server->dirconSession.cliSockFd) {
                         if (pollFdSet[n].revents & POLLRDHUP) {
                             // Process connection drop
-                            serverProcConnDrop(server, app);
+                            serverProcConnDrop(server);
                         } else {
                             // Process DIRCON message from app
-                            dirconProcMesg(server, app);
+                            dirconProcMesg(server);
                         }
 #ifdef CONFIG_MDNS_AGENT
                     } else if (fd == server->mdnsSockFd) {

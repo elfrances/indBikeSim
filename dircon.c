@@ -129,9 +129,9 @@ static int dirconSendMesg(Server *server, DirconSession *sess, MesgType mesgType
     gettimeofday(&timestamp, NULL);
 
     if (mesgType == request) {
-        mlog(debug, "sessId=%s mesgId=%u seqNum=%u mesgLen=%u", fmtDirconSessId(sess->sessId), mesg->mesgId, mesg->seqNum, mesg->mesgLen);
+        mlog(debug, "mesgId=%u seqNum=%u mesgLen=%u", mesg->mesgId, mesg->seqNum, mesg->mesgLen);
     } else {
-        mlog(debug, "sessId=%s mesgId=%u seqNum=%u respCode=%u mesgLen=%u", fmtDirconSessId(sess->sessId), mesg->mesgId, mesg->seqNum, mesg->respCode, mesg->mesgLen);
+        mlog(debug, "mesgId=%u seqNum=%u respCode=%u mesgLen=%u", mesg->mesgId, mesg->seqNum, mesg->respCode, mesg->mesgLen);
     }
 
     if (server->dissect)
@@ -245,7 +245,7 @@ int dirconProcTimers(Server *server, const struct timeval *time)
     DirconSession *sess;
 
     // App session
-    sess = &server->dirconSession[app];
+    sess = &server->dirconSession;
     if ((sess->nextNotification.tv_sec != 0) &&
         (tvCmp(time, &sess->nextNotification) >= 0)) {
         if (sess->ibdNotificationsEnabled) {
@@ -281,10 +281,9 @@ static int addService(Uuid128 *svcUuid, const Service *svc)
 
 static int dirconProcDiscoverServicesMesg(Server *server, DirconSession *sess, MesgType mesgType, const DirconMesg *mesg)
 {
-    DirconSessId sessId = sess->sessId;
     Service *svc;
 
-    if ((sessId == app) && (mesgType == request)) {
+    if (mesgType == request) {
         DiscSvcsMesg *resp = (DiscSvcsMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
         Uuid128 *svcUuid = resp->svcUuid;
 
@@ -309,7 +308,6 @@ static int addCharProp(CharProp *charProp, const Characteristic *chr)
 
 static int dirconProcDiscoverCharacteristicsMesg(Server *server, DirconSession *sess, MesgType mesgType, const DirconMesg *mesg)
 {
-    DirconSessId sessId = sess->sessId;
     DiscCharsMesg *discChars = (DiscCharsMesg *) mesg;
     const Uuid128 *svcUuid = &discChars->svcUuid;
     Service *svc = serverFindService(server, svcUuid);
@@ -317,7 +315,7 @@ static int dirconProcDiscoverCharacteristicsMesg(Server *server, DirconSession *
     if (mesg->mesgLen < sizeof (discChars->svcUuid))
         return -1;
 
-    if ((sessId == app) && (mesgType == request)) {
+    if (mesgType == request) {
         DiscCharsMesg *resp = (DiscCharsMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
 
         if (svc != NULL) {
@@ -509,19 +507,9 @@ static RxMesgHandler rxMesgHandler[] = {
         [UnsolicitedCharacteristicNotification] = dirconProcUnsolicitedCharacteristicNotificationMesg,
 };
 
-static int dirconForwardMesg(Server *server, DirconSession *sess, MesgType mesgType, const DirconMesg *mesg, int mesgLen)
+int dirconProcMesg(Server *server)
 {
-    DirconSessId otherSessId = swapDirconSessId(sess->sessId);
-    DirconMesg *fwdMesg = (DirconMesg *) server->txMesgBuf;
-
-    memcpy(fwdMesg, mesg, (sizeof (DirconMesg) + mesgLen));
-
-    return dirconSendMesg(server, &server->dirconSession[otherSessId], mesgType, fwdMesg);
-}
-
-int dirconProcMesg(Server *server, DirconSessId sessId)
-{
-    DirconSession *sess = &server->dirconSession[sessId];
+    DirconSession *sess = &server->dirconSession;
     DirconMesg *mesg = (DirconMesg *) server->rxMesgBuf;
     struct timeval timestamp;
     int n, mesgLen;
@@ -533,13 +521,12 @@ int dirconProcMesg(Server *server, DirconSessId sessId)
     if ((n = recv(sess->cliSockFd, mesg, sizeof (DirconMesg), 0)) != sizeof (DirconMesg)) {
         if ((n == 0) && (errno == 0)) {
             // Connection dropped
-            return serverProcConnDrop(server, sessId);
+            return serverProcConnDrop(server);
         } else if ((n == -1) && (errno = ETIMEDOUT)) {
             // TCP KA timeout
-            return serverProcConnDrop(server, sessId);
+            return serverProcConnDrop(server);
         } else {
-            mlog(fatal, "Failed to receive message header! sessId=%s fd=%d n=%d",
-                    fmtDirconSessId(sessId), sess->cliSockFd, n);
+            mlog(fatal, "Failed to receive message header! fd=%d n=%d", sess->cliSockFd, n);
             return -1;
         }
     }
@@ -554,8 +541,7 @@ int dirconProcMesg(Server *server, DirconSessId sessId)
     if (mesgLen != 0) {
         // Read enough data to complete the full message
         if ((n = recv(sess->cliSockFd, mesg->data, mesgLen, 0)) != mesgLen) {
-            mlog(fatal, "Failed to receive message data! sessId=%s fd=%d n=%d",
-                    fmtDirconSessId(sessId), sess->cliSockFd, n);
+            mlog(fatal, "Failed to receive message data! fd=%d n=%d", sess->cliSockFd, n);
             return -1;
         }
     }
@@ -585,20 +571,13 @@ int dirconProcMesg(Server *server, DirconSessId sessId)
     mesg->mesgLen = mesgLen;
 
     if (mesgType == request) {
-        mlog(debug, "sessId=%s mesgId=%u seqNum=%u mesgLen=%u", fmtDirconSessId(sessId), mesg->mesgId, mesg->seqNum, mesg->mesgLen);
+        mlog(debug, "mesgId=%u seqNum=%u mesgLen=%u", mesg->mesgId, mesg->seqNum, mesg->mesgLen);
     } else {
-        mlog(debug, "sessId=%s mesgId=%u seqNum=%u respCode=%u mesgLen=%u", fmtDirconSessId(sessId), mesg->mesgId, mesg->seqNum, mesg->respCode, mesg->mesgLen);
+        mlog(debug, "mesgId=%u seqNum=%u respCode=%u mesgLen=%u", mesg->mesgId, mesg->seqNum, mesg->respCode, mesg->mesgLen);
     }
 
     if (server->dissect) {
         dirconDumpMesg(&timestamp, server, sess, RxDir, mesgType, mesg);
-    }
-
-    // If message forwarding is enabled, and this message is not a
-    // DiscoverServices or DiscoverCharacteristics, then just relay
-    // the DIRCON message to the other session...
-    if (server->mesgForwarding && (mesg->mesgId != DiscoverServices) && (mesg->mesgId != DiscoverCharacteristics)) {
-        return dirconForwardMesg(server, sess, mesgType, mesg, mesgLen);
     }
 
     // Call the Rx message handler to do the work!

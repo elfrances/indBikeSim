@@ -28,17 +28,8 @@
 #include "svc.h"
 #include "trkpt.h"
 
-// DIRCON Session ID
-typedef enum DirconSessId {
-    inv = 0,
-    app = 1,    // DIRCON session with the virtual cycling app
-    dev = 2,    // DIRCON session with the indoor bike trainer
-    maxSess = 3
-} DirconSessId;
-
 // DIRCON Session Info
 typedef struct DirconSession {
-    DirconSessId sessId;                    // back reference
     char peerName[64];                      // name of the DIRCON peer device
     int cliSockFd;                          // file descriptor of the client (connected) DIRCON socket
     struct sockaddr_in locCliAddr;          // local-end of client socket address
@@ -97,8 +88,8 @@ typedef struct Server {
 
     uint8_t macAddr[6];             // MAC address of the local network interface
 
-    // DIRCON sessions
-    DirconSession dirconSession[maxSess];
+    // DIRCON session
+    DirconSession dirconSession;
 
     // List of supported services/characteristics
     TAILQ_HEAD(SvcList, Service) svcList;
@@ -135,14 +126,11 @@ __BEGIN_DECLS
 
 extern int serverInit(Server *server);
 extern int serverConnectToDirconTrainer(Server *server);
-extern int serverProcConnDrop(Server *server, DirconSessId sessId);
+extern int serverProcConnDrop(Server *server);
 extern int serverRun(Server *server);
 
 extern Service *serverAddService(Server *server, const Uuid128 *uuid);
 extern Service *serverFindService(const Server *server, const Uuid128 *uuid);
-
-extern DirconSessId swapDirconSessId(DirconSessId sessId);
-extern const char *fmtDirconSessId(DirconSessId sessId);
 
 extern const char *fmtSockaddr(const struct sockaddr_in *sockAddr, bool printPort);
 

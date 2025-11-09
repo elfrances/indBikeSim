@@ -197,7 +197,7 @@ extern int dirconInit(Server *server);
 extern int dirconProcConnReq(Server *server);
 extern int dirconProcConnDrop(Server *server);
 extern int dirconProcTimers(Server *server, const struct timeval *time);
-extern int dirconProcMesg(Server *server, DirconSessId sessId);
+extern int dirconProcMesg(Server *server);
 extern int dirconSendDiscoverServicesMesg(Server *server, DirconSession *sess);
 extern int dirconSendDiscoverCharacteristicsMesg(Server *server, DirconSession *sess, const Uuid128 *svcUuid);
 extern int dirconSendEnableCharacteristicNotificationsMesg(Server *server, DirconSession *sess, const Uuid128 *charUuid);

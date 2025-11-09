@@ -813,57 +813,11 @@ int mdnsProcQueryMesg(Server *server, const DnsMesgHdr *hdr, BinBuf *mesgBuf)
 
 int mdnsProcQueryRespMesg(Server *server, const DnsMesgHdr *hdr, BinBuf *mesgBuf)
 {
-    DirconSession *devSess = &server->dirconSession[dev];
-    FmtBuf nameBuf;
-    char name[256];
-    uint16_t qtype, qclass, rdlen;
-    uint32_t ttl;
-
     mlog(debug, "id=0x%04x opcode=%u aa=%u rcode=%u qdcnt=%u ancnt=%u nscnt=%u arcnt=%u",
                  hdr->id, getOpCode(hdr->flags), getAaFlag(hdr->flags), getRespCode(hdr->flags),
                  hdr->qdCount, hdr->anCount, hdr->nsCount, hdr->arCount);
 
-    // Process each Answer RR in the response...
-    for (int n = 0; n < hdr->anCount; n++) {
-        // Get the QNAME string
-        fmtBufInit(&nameBuf, name, sizeof (name));
-        if (mdnsRemName(mesgBuf, &nameBuf) != 0) {
-            // Ignore message...
-            mlog(debug, "Ignoring malformed/corrupted message...");
-            //hexDump(mesgBuf->buf, mesgBuf->bufSize);
-            return 0;
-        }
-
-        // Get the QTYPE and QCLASS values
-        qtype = binBufGetUINT16(mesgBuf);   // Get QTYPE
-        qclass = binBufGetUINT16(mesgBuf) & ~CACHE_FLUSH;   // Get QCLASS
-        ttl = binBufGetUINT32(mesgBuf);     // Get TTL
-        rdlen = binBufGetUINT16(mesgBuf);   // Get RDLENGTH
-
-        mlog(debug, "    qname=%s qtype=%u qclass=%u ttl=%" PRIu32 " rdlen=%u", nameBuf.buf, qtype, qclass, ttl, rdlen);
-
-        if (qtype == TYPE_PTR) {
-            // We only care about query responses for wahooFitnessTnpName
-            if (fmtBufComp(&nameBuf, &wahooFitnessTnpName) != 0) {
-                // Not interested!
-                return 0;
-            }
-            fmtBufInit(&nameBuf, name, sizeof (name));
-            mdnsRemName(mesgBuf, &nameBuf);     // Get RDATA (service domain name)
-            if (devSess->remCliAddr.sin_family == 0) {
-                devSess->remCliAddr.sin_family = AF_INET;
-            }
-        } else if (qtype == TYPE_A) {
-            memcpy(devSess->peerName, nameBuf.buf, nameBuf.offset); // save the indoor trainer device name
-            devSess->peerName[nameBuf.offset] = '\0';
-            devSess->remCliAddr.sin_addr.s_addr = htonl(binBufGetUINT32(mesgBuf));   // Get RDATA (IPv4 address)
-        } else if (qtype == TYPE_SRV) {
-            mesgBuf->offset += 4;   // skip over the priority (2) and weight (2) values
-            devSess->remCliAddr.sin_port = htons(binBufGetUINT16(mesgBuf));
-        } else if (qtype == TYPE_TXT) {
-
-        }
-    }
+    // TBD
 
     return 0;
 }
