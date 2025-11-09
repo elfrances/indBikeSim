@@ -1,6 +1,10 @@
 # indBikeSim
 
-indBikeSim is an app that simulates a basic FTMS Indoor Bike over DIRCON.
+indBikeSim is an app that simulates a basic FTMS Indoor Bike device. It supports the following features:
+
+* Uses Direct Connect (DIRCON) as the communication protocol with the virtual cycling app.
+* The FTMS Indoor Bike Data notifications include cadence, heart rate, power, and speed.
+* The cadence, heart rate, power, and speed values can be specified via command-line arguments or obtained from the trackpoints in a FIT file.
 
 ```
 sudo apt-get install avahi-utils avahi-discover
