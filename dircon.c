@@ -1,7 +1,7 @@
 /*
     indBikeSim - An app that simulates a basic FTMS indoor bike
 
-    Copyright (C) 2023  Marcelo Mourier  marcelo_mourier@yahoo.com
+    Copyright (C) 2025  Marcelo Mourier  marcelo_mourier@yahoo.com
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -489,21 +489,11 @@ static int dirconProcWriteCharacteristicMesg(Server *server, DirconSession *sess
         resp->charUuid = writeChar->charUuid;
         resp->hdr.mesgLen = sizeof (resp->charUuid);
 
-        if (uuid16Eq(&charUuid, &cyclingPowerControlPointUUID)) {
-            // Cycling Power Control Point
-        } else if (uuid16Eq(&charUuid, &weightUUID)) {
-            // Weight
-            server->weight = getUINT16(writeChar->data);
-        } else if (uuid16Eq(&charUuid, &fitnessMachineControlPointUUID)) {
+        if (uuid16Eq(&charUuid, &fitnessMachineControlPointUUID)) {
             // Fitness Machine Control Point
             const FitMachCP *fmcp = (FitMachCP *) writeChar->data;
             if (fmcp->opCode == FMCP_SET_INDOOR_BIKE_SIM_PARMS) {
-                // If the Cycling Power Measurement notifications
-                // have been enabled, and the Weight characteristic
-                // has been set, then the activity has started...
-                if (sess->cpmNotificationsEnabled && (server->weight != 0)) {
-                    server->actInProg = true;
-                }
+                server->actInProg = true;
             }
         } else {
             // This characteristic is not writable!
@@ -636,11 +626,6 @@ int dirconProcMesg(Server *server, DirconSessId sessId)
         if ((n == 0) && (errno == 0)) {
             // Connection dropped
             return serverProcConnDrop(server, sessId);
-#ifdef ESP_PLATFORM
-        } else if ((n == 0) && (errno = ENOTCONN)) {
-            // Connection dropped
-            return serverProcConnDrop(server, sessId);
-#endif
         } else if ((n == -1) && (errno = ETIMEDOUT)) {
             // TCP KA timeout
             return serverProcConnDrop(server, sessId);

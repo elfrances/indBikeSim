@@ -1,7 +1,7 @@
 /*
     indBikeSim - An app that simulates a basic FTMS indoor bike
 
-    Copyright (C) 2023  Marcelo Mourier  marcelo_mourier@yahoo.com
+    Copyright (C) 2025  Marcelo Mourier  marcelo_mourier@yahoo.com
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -24,11 +24,6 @@
 
 // Pull in the app's configuration options
 #include "config.h"
-
-#ifdef ESP_PLATFORM
-// Pull in the required ESP IDF header files
-#include "esp32.h"
-#endif
 
 // Convert a bit number 'n' to its corresponding 32-bit mask
 #define bitMask(n)  (0x01U << (n))

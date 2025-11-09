@@ -1,7 +1,7 @@
 /*
     indBikeSim - An app that simulates a basic FTMS indoor bike
 
-    Copyright (C) 2023  Marcelo Mourier  marcelo_mourier@yahoo.com
+    Copyright (C) 2025  Marcelo Mourier  marcelo_mourier@yahoo.com
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -44,26 +44,6 @@ static LogDest msgLogDest = console;
 static LogLevel msgLogLevel = info;
 static FILE *logFile = NULL;
 
-#ifdef ESP_PLATFORM
-static const char *fmtTimestamp(void)
-{
-    struct timeval now;
-    unsigned days, hr, min, sec;
-    static char tsBuf[24];  // DDD HH:MM:SS.xxxxxx
-
-    gettimeofday(&now, NULL);
-    sec = now.tv_sec;
-    days = sec / 86400;
-    sec = sec % 86400;
-    hr = sec / 3600;
-    sec = sec % 3600;
-    min = sec / 60;
-    sec = sec % 60;
-    snprintf(tsBuf, sizeof (tsBuf), "%03u %02u:%02u:%02u.%06u", days, hr, min, sec, (unsigned) now.tv_usec);
-
-    return tsBuf;
-}
-#else
 static const char *fmtTimestamp(void)
 {
     struct timeval now;
@@ -78,7 +58,6 @@ static const char *fmtTimestamp(void)
 
     return tsBuf;
 }
-#endif  // ESP_PLATFORM
 
 void msgLog(LogLevel logLevel, const char *funcName, int lineNum, int errNo, const char *fmt, ...)
 {
@@ -94,9 +73,6 @@ void msgLog(LogLevel logLevel, const char *funcName, int lineNum, int errNo, con
         fmtBufAppend(&fmtBuf, "%s %s ", fmtTimestamp(), logLevelName[logLevel]);
 
         if (logLevel >= trace) {
-#ifdef ESP_PLATFORM
-            fmtBufAppend(&fmtBuf, "%s:", pcTaskGetName(NULL));
-#endif
             fmtBufAppend(&fmtBuf, "%s:%d: ", funcName, lineNum);
         }
         va_start(ap, fmt);
@@ -115,13 +91,7 @@ void msgLog(LogLevel logLevel, const char *funcName, int lineNum, int errNo, con
         }
 
         if (logLevel == fatal) {
-#ifdef ESP_PLATFORM
-            while (true) {
-                usleep(100000);
-            }
-#else
             assert(false);
-#endif
         }
     }
 }

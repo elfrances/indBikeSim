@@ -1,7 +1,7 @@
 /*
     indBikeSim - An app that simulates a basic FTMS indoor bike
 
-    Copyright (C) 2023  Marcelo Mourier  marcelo_mourier@yahoo.com
+    Copyright (C) 2025  Marcelo Mourier  marcelo_mourier@yahoo.com
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -63,14 +63,6 @@ typedef enum CmdStat {
 static const char *cliHelp = \
     "Supported CLI commands:\n"
     "\n"
-    "disc-char {app|dev} <uuid>\n"
-    "    Send out a DIRCON 'Discover Characteristics' message\n"
-    "    to the specified target.\n"
-    "\n"
-    "disc-serv {app|dev}\n"
-    "    Send out a DIRCON 'Discover Services' message to the.\n"
-    "    specified target.\n"
-    "\n"
     "exit\n"
     "    Exit the tool.\n"
     "\n"
@@ -79,16 +71,6 @@ static const char *cliHelp = \
     "\n"
     "history\n"
     "    Print the command history.\n"
-    "\n"
-    "mdns-query <qname>\n"
-    "    Send out an mDNS query for the given name.\n"
-    "\n"
-    "read-char {app|dev} <uuid>\n"
-    "    Send out a DIRCON 'Read Characteristic' message to\n"
-    "    the specified target.\n"
-    "\n"
-    "show\n"
-    "    Show seesion information.\n"
     "\n"
     "NOTES:\n"
     "\n"
@@ -103,88 +85,11 @@ typedef struct CliCmd {
     bool needConn;
 } CliCmd;
 
-static int invArg(const char *arg)
-{
-    fprintf(stderr, "ERROR: invalid argument \"%s\"\n", arg);
-    return ERROR;
-}
-
-static int sessIsDown(void)
-{
-    fprintf(stderr, "ERROR: DIRCON session is down\n");
-    return ERROR;
-}
-
-static DirconSessId scanDirconSessId(const char *val)
-{
-    DirconSessId sessId = inv;
-
-    if (strcmp(val, "app") == 0) {
-        sessId = app;
-    } else if (strcmp(val, "dev") == 0) {
-        sessId = dev;
-    }
-
-    return sessId;
-}
-
-static int scanUuid16(Uuid16 *uuid, const char *val)
-{
-    uint32_t data[2];
-
-    if (strlen(val) == 4) {
-        if (sscanf(val, "%02x%02x", &data[0], &data[1]) == 2) {
-            uuid->data[0] = data[0];
-            uuid->data[1] = data[1];
-            return 0;
-        }
-    }
-
-    return -1;
-}
-
-static CmdStat cliCmdDiscChar(CliInfo *cliInfo)
-{
-    Server *server = cliInfo->server;
-    DirconSessId sessId;
-    Uuid16 uuid = {0};
-    Uuid128 svcUuid = {0};
-
-    if ((sessId = scanDirconSessId(cliInfo->argv[1])) == inv) {
-        return invArg(cliInfo->argv[1]);
-    }
-
-    if (scanUuid16(&uuid, cliInfo->argv[2]) != 0) {
-        return invArg(cliInfo->argv[2]);
-    }
-
-    if (server->dirconSession[sessId].cliSockFd == 0) {
-        return sessIsDown();
-    }
-
-    buildUuid128(&svcUuid, &uuid);
-    dirconSendDiscoverCharacteristicsMesg(server, &server->dirconSession[sessId], &svcUuid);
-
-    return OK;
-}
-
-static CmdStat cliCmdDiscServ(CliInfo *cliInfo)
-{
-    Server *server = cliInfo->server;
-    DirconSessId sessId;
-
-    if ((sessId = scanDirconSessId(cliInfo->argv[1])) == inv) {
-        return invArg(cliInfo->argv[1]);
-    }
-
-    if (server->dirconSession[sessId].cliSockFd == 0) {
-        return sessIsDown();
-    }
-
-    dirconSendDiscoverServicesMesg(server, &server->dirconSession[sessId]);
-
-    return OK;
-}
+//static int invArg(const char *arg)
+//{
+//    fprintf(stderr, "ERROR: invalid argument \"%s\"\n", arg);
+//    return ERROR;
+//}
 
 static CmdStat cliCmdExit(CliInfo *cliInfo)
 {
@@ -216,99 +121,16 @@ static CmdStat cliCmdHistory(CliInfo *cliInfo)
     return OK;
 }
 
-static CmdStat cliCmdMdnsQuery(CliInfo *cliInfo)
-{
-    FmtBuf qname;
-    char buf[256];
-
-    fmtBufInit(&qname, buf, sizeof (buf));
-    fmtBufAppend(&qname, "%s", cliInfo->argv[1]);
-    mdnsSendQuery(cliInfo->server, &qname);
-
-    return OK;
-}
-
-static CmdStat cliCmdReadChar(CliInfo *cliInfo)
-{
-    Server *server = cliInfo->server;
-    DirconSessId sessId;
-    Uuid16 uuid = {0};
-    Uuid128 charUuid = {0};
-
-    if ((sessId = scanDirconSessId(cliInfo->argv[1])) == inv) {
-        return invArg(cliInfo->argv[1]);
-    }
-
-    if (scanUuid16(&uuid, cliInfo->argv[2]) != 0) {
-        return invArg(cliInfo->argv[2]);
-    }
-
-    if (server->dirconSession[sessId].cliSockFd == 0) {
-        return sessIsDown();
-    }
-
-    buildUuid128(&charUuid, &uuid);
-    dirconSendReadCharacteristicMesg(server, &server->dirconSession[sessId], &charUuid);
-
-    return OK;
-}
-
 static CmdStat cliCmdShow(CliInfo *cliInfo)
 {
-    Server *server = cliInfo->server;
-    DirconSession *sess;
-    Service *svc;
-    Characteristic *chr;
-
-    printf("Discovered Services:\n");
-    TAILQ_FOREACH(svc, &server->svcList, svcListEnt) {
-        printf("Service: uuid=%s (%s) {\n", fmtUuid128(&svc->uuid), fmtUuid128Name(&svc->uuid));
-        TAILQ_FOREACH(chr, &svc->charList, charListEnt) {
-            printf("    Characteristic: uuid=%s (%s)\n", fmtUuid128(&chr->uuid), fmtUuid128Name(&chr->uuid));
-        }
-        printf("}\n");
-    }
-    printf("\n");
-
-    printf("APP Session:\n");
-    sess = &server->dirconSession[app];
-    if (sess->remCliAddr.sin_family != 0) {
-        char remAddrBuf[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &sess->remCliAddr.sin_addr, remAddrBuf, sizeof (remAddrBuf));
-        printf("App Address:            %s[%u]\n", remAddrBuf, ntohs(sess->remCliAddr.sin_port));
-        printf("Tx App DIRCON Messages: %u\n", sess->txMesgCnt);
-        printf("Rx App DIRCON Messages: %u\n", sess->rxMesgCnt);
-    }
-    printf("\n");
-
-    printf("DEV Session:\n");
-    sess = &server->dirconSession[dev];
-    if (sess->remCliAddr.sin_family != 0) {
-        char remAddrBuf[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &sess->remCliAddr.sin_addr, remAddrBuf, sizeof (remAddrBuf));
-        printf("Device Address:         %s[%u]\n", remAddrBuf, ntohs(sess->remCliAddr.sin_port));
-        printf("Tx Dev DIRCON Messages: %u\n", sess->txMesgCnt);
-        printf("Rx Dev DIRCON Messages: %u\n", sess->rxMesgCnt);
-    }
-    printf("\n");
-
-    if (server->mdnsAddr.sin_family != 0) {
-        printf("Tx mDNS Messages:       %u\n", server->txMdnsMesgCnt);
-        printf("Rx mDNS Messages:       %u\n", server->rxMdnsMesgCnt);
-    }
-
     return OK;
 }
 
 // CLI command table
 static CliCmd cliCmdTbl [] = {
-    { "disc-char",      cliCmdDiscChar,             3,  3, "{app|dev} <uuid>",  true },
-    { "disc-serv",      cliCmdDiscServ,             2,  2, NULL,                true },
     { "exit",           cliCmdExit,                 1,  1, NULL,                false },
     { "help",           cliCmdHelp,                 1,  1, NULL,                false },
     { "history",        cliCmdHistory,              1,  1, NULL,                false },
-    { "mdns-query",     cliCmdMdnsQuery,            2,  2, "{app|dev} <qname>", false },
-    { "read-char",      cliCmdReadChar,             3,  3, "{app|dev} <uuid>",  true },
     { "show",           cliCmdShow,                 1,  1, NULL,                false },
     { NULL,             NULL,                       0,  0, NULL,                false },
 };

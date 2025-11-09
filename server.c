@@ -1,7 +1,7 @@
 /*
     indBikeSim - An app that simulates a basic FTMS indoor bike
 
-    Copyright (C) 2023  Marcelo Mourier  marcelo_mourier@yahoo.com
+    Copyright (C) 2025  Marcelo Mourier  marcelo_mourier@yahoo.com
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -367,11 +367,14 @@ static int findIntfAddr(Server *server)
         {
             const struct sockaddr_in *sin = (struct sockaddr_in *) sockAddr;
             if (ntohl(sin->sin_addr.s_addr) != INADDR_LOOPBACK) {
-                // Get the IP address
-                server->srvAddr.sin_addr.s_addr = sin->sin_addr.s_addr;
+                if ((server->srvAddr.sin_family == 0) || (sin->sin_addr.s_addr == server->srvAddr.sin_addr.s_addr)) {
+                    // Get the IP address
+                    server->srvAddr.sin_family = sin->sin_family;
+                    server->srvAddr.sin_addr.s_addr = sin->sin_addr.s_addr;
 
-                // Get the MAC address
-                s = getIntfMacAddr(server, ifAddr->ifa_name);
+                    // Get the MAC address
+                    s = getIntfMacAddr(server, ifAddr->ifa_name);
+                }
                 break;
             }
         }
@@ -432,26 +435,16 @@ int serverInit(Server *server)
     }
 #endif
 
-    if (server->srvAddr.sin_addr.s_addr == 0) {
-        // Figure out the interface IP address...
-        if (findIntfAddr(server) != 0) {
-            mlog(error, "Can't determine interface IP address!");
-            return -1;
-        }
+    // Figure out the interface IP address to use
+    if (findIntfAddr(server) != 0) {
+        mlog(error, "Can't determine interface IP address!");
+        return -1;
     }
 
     mlog(info, "Using socket address: %s at %02x-%02x-%02x-%02x-%02x-%02x",
             fmtSockaddr(&server->srvAddr, true),
             server->macAddr[0], server->macAddr[1], server->macAddr[2],
             server->macAddr[3], server->macAddr[4], server->macAddr[5]);
-
-#ifdef CONFIG_BLE_CONTROLLER
-    // Initialize the BLE API
-    if (bleInit(server) != 0) {
-        mlog(error, "Can't init BLE API!");
-        return -1;
-    }
-#endif
 
     if (server->dirconSession[dev].remCliAddr.sin_family == 0) {
     	// We don't have a downstream DIRCON indoor
@@ -460,262 +453,6 @@ int serverInit(Server *server)
     	if (initServerSock(server) != 0) {
     		mlog(fatal, "Failed to init DIRCON server socket!");
     	}
-    }
-
-    return 0;
-}
-
-#ifdef CONFIG_MDNS_AGENT
-static int discoverIndoorTrainer(Server *server)
-{
-    // Send an mDNS query for "_wahoo-fitness-tnp._tcp.local"
-    if (mdnsSendQuery(server, &wahooFitnessTnpName) != 0) {
-        mlog(error, "mdnsSendQuery()!");
-        return -1;
-    }
-
-    // Wait up to 10 sec for a query response...
-    for (int i = 0; i < 10; i++) {
-        DirconSession *devSess = &server->dirconSession[dev];
-        struct pollfd pollFdSet[1];
-        int n;
-
-        pollFdSet[0].fd = server->mdnsSockFd;
-        pollFdSet[0].events = POLLIN;
-        pollFdSet[0].revents = 0;
-        if ((n = poll(pollFdSet, 1, 1000)) == 0) {
-            continue;
-        } else if (n < 0) {
-            mlog(error, "poll()");
-            return -1;
-        }
-
-        if (mdnsProcMesg(server) != 0) {
-            mlog(error, "mdnsProcMesg()!");
-            return -1;
-        }
-
-        if (devSess->remCliAddr.sin_family != 0) {
-            // DIRCON trainer discovered!
-            mlog(info, "DIRCON trainer discovered: \"%s\" at %s", devSess->peerName, fmtSockaddr(&devSess->remCliAddr, true));
-            break;
-        }
-    }
-
-    return 0;
-}
-#endif
-
-static int connToIndoorTrainer(Server *server)
-{
-    DirconSession *sess = &server->dirconSession[dev];
-    int cliSockFd;
-    int enable = 1;
-    int kaOptVal;
-    int connAttempts = 0;
-    const int maxConnAttemps = 3;
-
-    // Set up the client (local) address
-    sess->locCliAddr.sin_family = AF_INET;
-    sess->locCliAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    sess->locCliAddr.sin_port = htons(0);
-
-    // To protect against trainers that reject a new connection
-    // attempt immediately after a connection drop or an app
-    // restart, we allow a few connection retries...
-    while (connAttempts++ < maxConnAttemps) {
-        if ((cliSockFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-            mlog(error, "Can't alloc TCP socket!");
-            return -1;
-        }
-
-        if (bind(cliSockFd, (struct sockaddr *) &sess->locCliAddr, sizeof (sess->locCliAddr)) < 0) {
-            mlog(error, "Can't bind TCP socket!");
-            close(cliSockFd);
-            return -1;
-        }
-
-        // Connect to the smart trainer.
-        if (connect(cliSockFd, (struct sockaddr *) &sess->remCliAddr, sizeof (sess->remCliAddr)) == 0) {
-            // Success!
-            break;
-        } else if ((errno == ECONNRESET) && (connAttempts < maxConnAttemps)) {
-            mlog(warning, "Connection attempt #%u failed. Retrying in 10 s ...", connAttempts);
-            close(cliSockFd);
-            sleep(10);
-            continue;
-        } else {
-            mlog(error, "Can't connect TCP socket: sd=%d addr=%s", cliSockFd, fmtSockaddr(&sess->remCliAddr, true));
-            close(cliSockFd);
-            return -1;
-        }
-    }
-
-    // Enable TCP Keep-Alive's
-    if (setsockopt(cliSockFd, SOL_SOCKET, SO_KEEPALIVE, &enable, sizeof (enable)) != 0) {
-        mlog(error, "Can't set SO_KEEPALIVE option!");
-        close(cliSockFd);
-        return -1;
-    }
-#ifndef __DARWIN__
-    kaOptVal = 1;   // start sending KA's after being idle for 1 sec
-    if (setsockopt(cliSockFd, IPPROTO_TCP, TCP_KEEPIDLE, &kaOptVal, sizeof (kaOptVal)) != 0) {
-        mlog(error, "Can't set TCP_KEEPIDLE option!");
-        close(cliSockFd);
-        return -1;
-    }
-#endif
-    kaOptVal = 1;   // Use a 1 sec KA interval
-    if (setsockopt(cliSockFd, IPPROTO_TCP, TCP_KEEPINTVL, &kaOptVal, sizeof (kaOptVal)) != 0) {
-        mlog(error, "Can't set TCP_KEEPINTVL option!");
-        close(cliSockFd);
-        return -1;
-    }
-    kaOptVal = 2;   // Close connection after 2 unsuccessful KA probes
-    if (setsockopt(cliSockFd, IPPROTO_TCP, TCP_KEEPCNT, &kaOptVal, sizeof (kaOptVal)) != 0) {
-        mlog(error, "Can't set TCP_KEEPCNT option!");
-        close(cliSockFd);
-        return -1;
-    }
-
-    // Set NODELAY option to reduce the latency of the
-    // messages we send out over this DIRCON session.
-    if (setsockopt(cliSockFd, IPPROTO_TCP, TCP_NODELAY, &enable, sizeof (enable)) != 0) {
-        mlog(error, "Can't set TCP_NODELAY option!");
-        close(cliSockFd);
-        return -1;
-    }
-
-    // Figure out the actual local address and port
-    {
-        socklen_t addrLen = sizeof(sess->locCliAddr);
-        if (getsockname(cliSockFd, (struct sockaddr *) &sess->locCliAddr, &addrLen) < 0) {
-            mlog(error, "Can't connect TCP socket!");
-            close(cliSockFd);
-            return -1;
-        }
-    }
-
-    {
-        char locAddrBuf[INET_ADDRSTRLEN];
-        char remAddrBuf[INET_ADDRSTRLEN];
-
-        inet_ntop(AF_INET, &sess->locCliAddr.sin_addr, locAddrBuf, sizeof (locAddrBuf));
-        inet_ntop(AF_INET, &sess->remCliAddr.sin_addr, remAddrBuf, sizeof (remAddrBuf));
-        mlog(info, "Connected to indoor trainer: %s[%u] -> %s[%u]",
-                locAddrBuf, ntohs(sess->locCliAddr.sin_port),
-                remAddrBuf, ntohs(sess->remCliAddr.sin_port));
-    }
-
-    sess->cliSockFd = cliSockFd;
-
-    return 0;
-}
-
-static int discoverIndoorTrainerServices(Server *server)
-{
-    DirconSession *sess = &server->dirconSession[dev];
-    Uuid128 uuid;
-    Service *svc;
-    Characteristic *chr;
-
-    // Send trainer a Discover Services messages...
-    if (dirconSendDiscoverServicesMesg(server, sess) != 0) {
-        mlog(error, "Failed to send Discover Services request message!");
-        return -1;
-    }
-
-    // ... and wait for its response
-    if (dirconProcMesg(server, dev) != 0) {
-        mlog(error, "Failed to get Discover Services response message!");
-        return -1;
-    }
-
-    // Now query the trainer for the characteristics
-    // of each of its advertised services...
-    {
-        TAILQ_FOREACH(svc, &server->svcList, svcListEnt) {
-            // Send trainer a Discover Characteristics messages...
-            if (dirconSendDiscoverCharacteristicsMesg(server, sess, &svc->uuid) != 0) {
-                mlog(error, "Failed to send Discover Characteristics request message!");
-                return -1;
-            }
-
-            // ... and wait for its response
-            if (dirconProcMesg(server, dev) != 0) {
-                mlog(error, "Failed to get Discover Characteristics response message!");
-                return -1;
-            }
-        }
-    }
-
-    // Check that the trainer supports the Fitness Machine Service
-    buildUuid128(&uuid, &fitnessMachineServiceUUID);
-    if ((svc = serverFindService(server, &uuid)) == NULL) {
-        mlog(error, "Indoor trainer doesn't support the Fitness Machine Service!");
-        return -1;
-    }
-
-    // Now check that the Fitness Machine Service supports the
-    // Indoor Bike Data characteristic ...
-    buildUuid128(&uuid, &indoorBikeDataUUID);
-    if ((chr = svcFindChar(svc, &uuid)) == NULL) {
-        mlog(error, "Fitness Machine Service doesn't support the Indoor Bike Data characteristic!");
-        return -1;
-    }
-
-    // ... and that the Indoor Bike Data characteristic supports
-    // unsolicited notifications.
-    if (!(chr->properties & DIRCON_CHAR_PROP_NOTIFY)) {
-        mlog(error, "Indoor Bike Data characteristic doesn't support notifications!");
-        return -1;
-    }
-
-    // We are good to go!
-    mlog(info, "Indoor trainer meets requirements!");
-
-    return 0;
-}
-
-int serverConnectToDirconTrainer(Server *server)
-{
-#ifdef CONFIG_MDNS_AGENT
-    if (server->dirconSession[dev].remCliAddr.sin_family == 0) {
-        // Try to discover the downstream DIRCON
-        // indoor trainer via mDNS...
-        if (discoverIndoorTrainer(server) != 0) {
-            mlog(warning, "No DIRCON indoor trainer discovered...");
-        }
-    }
-#endif
-
-    if (server->dirconSession[dev].remCliAddr.sin_family != 0) {
-        // Connect to the downstream indoor trainer
-        if (connToIndoorTrainer(server) != 0) {
-            mlog(error, "Failed to connect to indoor trainer!");
-            return -1;
-        }
-
-        // Discover the services and characteristics of the
-        // downstream indoor trainer, and check that it meets
-        // the minimum requirements.
-        if (discoverIndoorTrainerServices(server) != 0) {
-            mlog(error, "Unsupported indoor trainer!");
-            return -1;
-        }
-
-        // Set up TCP server (listening) socket
-        if (initServerSock(server) != 0) {
-            mlog(error, "Failed to init server socket!");
-            return -1;
-        }
-
-        // If bridge mode is enabled, at this point we can
-        // start doing the DIRCON message forwarding...
-        if (server->bridgeMode) {
-            server->mesgForwarding = true;
-            mlog(trace, "DIRCON message forwarding enabled ...");
-        }
     }
 
     return 0;
@@ -787,8 +524,6 @@ int serverProcConnDrop(Server *server, DirconSessId sessId)
     sess->ibdNotificationsEnabled = false;
     sess->rxMesgCnt = 0;
     sess->txMesgCnt = 0;
-    if (sessId == app)
-        server->weight = 0;
 
     // Close our end of the socket
     close(sess->cliSockFd);

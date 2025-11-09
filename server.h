@@ -1,7 +1,7 @@
 /*
     indBikeSim - An app that simulates a basic FTMS indoor bike
 
-    Copyright (C) 2023  Marcelo Mourier  marcelo_mourier@yahoo.com
+    Copyright (C) 2025  Marcelo Mourier  marcelo_mourier@yahoo.com
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -91,11 +91,9 @@ typedef struct Server {
     int stdinFd;                    // file descriptor of stdin stream
     int srvSockFd;                  // file descriptor of the server (listening) DIRCON socket
     int mdnsSockFd;                 // file descriptor of the MDNS UDP socket
-    int bleSockFd;                  // file descriptor of the BLE UDP socket
 
     struct sockaddr_in srvAddr;     // listening socket address
     struct sockaddr_in mdnsAddr;    // mDNS socket address
-    struct sockaddr_in bleAddr;     // BLE socket address
 
     uint8_t macAddr[6];             // MAC address of the local network interface
 
@@ -105,7 +103,6 @@ typedef struct Server {
     // List of supported services/characteristics
     TAILQ_HEAD(SvcList, Service) svcList;
 
-    SelChrInfo cyclingPowerMeasurement;
     SelChrInfo fitnessMachineControlPoint;
     SelChrInfo heartRateMeasurement;
     SelChrInfo indoorBikeDataUUID;
@@ -124,27 +121,18 @@ typedef struct Server {
     uint32_t rxMdnsMesgCnt;
     uint32_t txMdnsMesgCnt;
 
-    // Crank Revolution Data
-    uint16_t cumCrankRev;           // Cumulative Crank Revolutions
-    uint16_t ccrRem;                // CCR remainder
-    uint16_t lastCrankEvtTime;      // Last Crank Event Time (in 1/1024 sec)
-
     uint16_t cadence;               // Cadence [RPM]
     uint16_t heartRate;             // Heart Rate [BPM]
     uint16_t power;                 // Power [Watts]
 
-    uint16_t weight;                // Weight [kg x 200] (e.g. 75 kg = 15000)
-
     int dissectMesgId;
 
     bool actInProg;                 // activity in progress
-    bool bridgeMode;
     bool dissect;
     bool exit;
     bool hexDumpMesg;
     bool mesgForwarding;
     bool noMdns;
-    bool patsHack;
 } Server;
 
 __BEGIN_DECLS
