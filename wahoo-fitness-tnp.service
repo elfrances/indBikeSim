@@ -1,0 +1,13 @@
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>
+  <name replace-wildcards="yes">Wahoo Fitness DIRCON Device on %h</name>
+  <service>
+    <type>_wahoo-fitness-tnp._tcp</type>
+    <port>36866</port>
+    <txt-record>serial-number=123456789</txt-record>
+    <txt-record>mac-address=00-11-22-33-44-55</txt-record>
+    <txt-record>ble-services-uuids=0x1826</txt-record>
+  </service>
+</service-group>
+
