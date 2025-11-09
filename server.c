@@ -446,13 +446,9 @@ int serverInit(Server *server)
             server->macAddr[0], server->macAddr[1], server->macAddr[2],
             server->macAddr[3], server->macAddr[4], server->macAddr[5]);
 
-    if (server->dirconSession[dev].remCliAddr.sin_family == 0) {
-    	// We don't have a downstream DIRCON indoor
-    	// trainer, so we can init the DIRCON server
-    	// socket now...
-    	if (initServerSock(server) != 0) {
-    		mlog(fatal, "Failed to init DIRCON server socket!");
-    	}
+    // Init the DIRCON server socket
+    if (initServerSock(server) != 0) {
+        mlog(fatal, "Failed to init DIRCON server socket!");
     }
 
     return 0;
@@ -520,7 +516,6 @@ int serverProcConnDrop(Server *server, DirconSessId sessId)
     sess->nextNotification.tv_sec = 0;
 
     // Clean up
-    sess->cpmNotificationsEnabled = false;
     sess->ibdNotificationsEnabled = false;
     sess->rxMesgCnt = 0;
     sess->txMesgCnt = 0;
@@ -567,26 +562,10 @@ int serverRun(Server *server)
             pollFdSet[numFds++].revents = 0;
         }
 
-        // Device client socket input
-        if (server->dirconSession[dev].cliSockFd) {
-            pollFdSet[numFds].fd = server->dirconSession[dev].cliSockFd;
-            pollFdSet[numFds].events = POLLIN | POLLRDHUP;
-            pollFdSet[numFds++].revents = 0;
-        }
-
 #ifdef CONFIG_MDNS_AGENT
         // mDNS socket input
         if (server->mdnsSockFd) {
             pollFdSet[numFds].fd = server->mdnsSockFd;
-            pollFdSet[numFds].events = POLLIN;
-            pollFdSet[numFds++].revents = 0;
-        }
-#endif
-
-#ifdef CONFIG_BLE_CONTROLLER
-        // BLE socket input
-        if (server->bleSockFd) {
-            pollFdSet[numFds].fd = server->bleSockFd;
             pollFdSet[numFds].events = POLLIN;
             pollFdSet[numFds++].revents = 0;
         }
@@ -644,26 +623,12 @@ int serverRun(Server *server)
                             // Process DIRCON message from app
                             dirconProcMesg(server, app);
                         }
-                    } else if (fd == server->dirconSession[dev].cliSockFd) {
-                        if (pollFdSet[n].revents & POLLRDHUP) {
-                            // Process connection drop
-                            serverProcConnDrop(server, dev);
-                        } else {
-                            // Process DIRCON message from device
-                            dirconProcMesg(server, dev);
-                        }
 #ifdef CONFIG_MDNS_AGENT
                     } else if (fd == server->mdnsSockFd) {
                         // Process mDNS message
                         mdnsProcMesg(server);
 #endif
                     }
-#ifdef CONFIG_BLE_CONTROLLER
-                    else if (fd == server->bleSockFd) {
-                        // Process BLE message
-                        bleProcMesg(server);
-                    }
-#endif
                 }
             }
         }

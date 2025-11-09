@@ -248,11 +248,6 @@ int dirconProcTimers(Server *server, const struct timeval *time)
     sess = &server->dirconSession[app];
     if ((sess->nextNotification.tv_sec != 0) &&
         (tvCmp(time, &sess->nextNotification) >= 0)) {
-        if (sess->cpmNotificationsEnabled) {
-            // Send a Cycling Power Measurement notification
-            dirconSendUnsolicitedCharacteristicNotificationMesg(server, sess, &cyclingPowerMeasurementUUID);
-        }
-
         if (sess->ibdNotificationsEnabled) {
             // Send an Indoor Bike Data notification
             dirconSendUnsolicitedCharacteristicNotificationMesg(server, sess, &indoorBikeDataUUID);
@@ -270,17 +265,6 @@ int dirconProcTimers(Server *server, const struct timeval *time)
             }
         }
 #endif
-
-        // Re-arm the timer with a 1-sec expiry
-        sess->nextNotification.tv_sec++;
-    }
-
-    // Device session
-    sess = &server->dirconSession[dev];
-    if ((sess->nextNotification.tv_sec != 0) &&
-        (tvCmp(time, &sess->nextNotification) >= 0)) {
-
-        // TBD
 
         // Re-arm the timer with a 1-sec expiry
         sess->nextNotification.tv_sec++;
@@ -311,38 +295,6 @@ static int dirconProcDiscoverServicesMesg(Server *server, DirconSession *sess, M
 
         // Send response!
         dirconSendMesg(server, sess, response, (DirconMesg *) resp);
-    } else if ((sessId == dev) && (mesgType == response)) {
-        // Check the response code
-        if (mesg->respCode == SuccessRequest) {
-            const DiscSvcsMesg *discSvcsMesg = (DiscSvcsMesg *) mesg;
-            const Uuid128 *svcUuid = discSvcsMesg->svcUuid;
-            int mesgLen = mesg->mesgLen;
-
-            // Process each characteristic in the list
-            while (mesgLen >= sizeof (Uuid128)) {
-                // We only care about a few standard services...
-                Uuid16 uuid;
-                getUuid16(&uuid, svcUuid);
-                if (uuid16Eq(&uuid, &deviceInfoUUID) ||
-                    uuid16Eq(&uuid, &heartRateServiceUUID) ||
-                    uuid16Eq(&uuid, &cyclingPowerServiceUUID) ||
-                    uuid16Eq(&uuid, &fitnessMachineServiceUUID)) {
-                    if (serverFindService(server, svcUuid) == NULL) {
-                        if (serverAddService(server, svcUuid) == NULL) {
-                            mlog(error, "Failed to add service: sessId=%s svcUuid=%s", fmtDirconSessId(sessId), fmtUuid128(svcUuid));
-                        }
-                    } else {
-                        mlog(warning, "Ignoring duplicate service: svcUuid=%s", fmtUuid128(svcUuid));
-                    }
-                }
-                svcUuid++;
-                mesgLen -= sizeof (Uuid128);
-            }
-        } else {
-            mlog(error, "Transaction failed: sessId=%s seqNum=%u respCode=%u", fmtDirconSessId(sessId), mesg->seqNum, mesg->respCode);
-        }
-
-        sess->respPend = false;
     }
 
     return 0;
@@ -386,37 +338,6 @@ static int dirconProcDiscoverCharacteristicsMesg(Server *server, DirconSession *
 
         // Send response!
         dirconSendMesg(server, sess, response, (DirconMesg *) resp);
-    } else if ((sessId == dev) && (mesgType == response)) {
-        // Check the response code
-        if (mesg->respCode == SuccessRequest) {
-            const DiscCharsMesg *resp = (DiscCharsMesg *) mesg;
-            const Uuid128 *svcUuid = &resp->svcUuid;
-
-            if (svc != NULL) {
-                const CharProp *charProp = resp->charProp;
-                int mesgLen = mesg->mesgLen;
-
-                // Process each characteristic in the list
-                while (mesgLen >= sizeof (CharProp)) {
-                    if (svcFindChar(svc, &charProp->charUuid) == NULL) {
-                        if (svcAddChar(svc, &charProp->charUuid, charProp->properties) == NULL) {
-                            mlog(error, "Failed to add characteristic: sessId=%s svcUuid=%s charUuid=%s",
-                                    fmtDirconSessId(sessId), fmtUuid128(svcUuid), fmtUuid128(&charProp->charUuid));
-                        }
-                    } else {
-                        mlog(warning, "Ignoring duplicate characteristic: charUuid=%s", fmtUuid128(&charProp->charUuid));
-                    }
-                    charProp++;
-                    mesgLen -= sizeof (CharProp);
-                }
-            } else {
-                mlog(error, "Hu? Can't find service! sessId=%s svcUuid=%s", fmtDirconSessId(sessId), fmtUuid128(svcUuid));
-            }
-        } else {
-            mlog(error, "Transaction failed: seqNum=%u respCode=%u", mesg->seqNum, mesg->respCode);
-        }
-
-        sess->respPend = false;
     }
 
     return 0;
@@ -533,20 +454,7 @@ static int dirconProcEnableCharacteristicNotificationsMesg(Server *server, Dirco
         resp->charUuid = req->charUuid;
         resp->enable = req->enable;
         resp->hdr.mesgLen = sizeof (resp->charUuid);
-        if (uuid16Eq(&charUuid, &cyclingPowerMeasurementUUID)) {
-            // Cycling Power Measurement
-            if (enable) {
-                if (sess->nextNotification.tv_sec == 0) {
-                    // Start the notification timer with a 1-sec expiry
-                    sess->nextNotification = now;
-                    sess->nextNotification.tv_sec++;
-                }
-            }
-            sess->cpmNotificationsEnabled = enable;
-        } else if (uuid16Eq(&charUuid, &cyclingPowerControlPointUUID)) {
-            // Cycling Power Control Point
-            //   TBD
-        } else if (uuid16Eq(&charUuid, &indoorBikeDataUUID)) {
+        if (uuid16Eq(&charUuid, &indoorBikeDataUUID)) {
             // Indoor Bike Data
             if (enable) {
                 if (sess->nextNotification.tv_sec == 0) {
@@ -561,7 +469,7 @@ static int dirconProcEnableCharacteristicNotificationsMesg(Server *server, Dirco
             //   TBD
         } else if (uuid16Eq(&charUuid, &fitnessMachineControlPointUUID)) {
             // Fitness Machine Control Point
-            //   TBD
+            sess->fmcpNotificationsEnabled = enable;
         } else if (uuid16Eq(&charUuid, &fitnessMachineStatusUUID)) {
             // Fitness Machine Status
             //   TBD

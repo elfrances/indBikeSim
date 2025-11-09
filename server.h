@@ -48,7 +48,7 @@ typedef struct DirconSession {
     uint32_t txMesgCnt;
     uint8_t lastTxReqSeqNum;
     uint8_t lastRxReqSeqNum;
-    bool cpmNotificationsEnabled;           // Cycling Power Measurement notifications enabled
+    bool fmcpNotificationsEnabled;          // Fitness Machine Control Point notifications enabled
     bool ibdNotificationsEnabled;           // Indoor Bike Data notifications enabled
     bool respPend;                          // server-initiated DIRCON transaction in progress
 } DirconSession;
@@ -102,10 +102,6 @@ typedef struct Server {
 
     // List of supported services/characteristics
     TAILQ_HEAD(SvcList, Service) svcList;
-
-    SelChrInfo fitnessMachineControlPoint;
-    SelChrInfo heartRateMeasurement;
-    SelChrInfo indoorBikeDataUUID;
 
 #ifdef CONFIG_FIT_ACTIVITY_FILE
     FILE *actFile;                  // FIT/TCX activity file
