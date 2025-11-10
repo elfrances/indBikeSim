@@ -260,11 +260,13 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+#ifdef CONFIG_MDNS_AGENT
     // Initialize mDNS
     if (mdnsInit(server) != 0) {
         cliPreExitCleanup(server);
         return -1;
     }
+#endif
 
     // Run server's work loop
     if (serverRun(server) != 0) {

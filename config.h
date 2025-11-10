@@ -22,10 +22,6 @@
 // By convention the name of the configuration options is "CONFIG_XXXX"
 // Defining (undefining) the option includes (excludes) the feature.
 
-// BLE Controller: allows the app to discover an connect to BLE sensor
-// devices, such as HR monitors or pedal power sensors.
-#undef CONFIG_BLE_CONTROLLER
-
 // Command Line Interface: adds an interactive CLI helpful for debugging
 #define CONFIG_CLI
 
@@ -34,7 +30,7 @@
 #define CONFIG_FIT_ACTIVITY_FILE
 
 // mDNS Agent: allows the app to advertise and discover services via mDNS
-#define CONFIG_MDNS_AGENT
+#undef CONFIG_MDNS_AGENT
 
 // MsgLog: enables the trace message logging facility
 #define CONFIG_MSGLOG
