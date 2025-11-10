@@ -221,14 +221,14 @@ static uint16_t initIndoorBikeDataChar(Server *server, IndoorBikeData *ibd)
     return (sizeof (IndoorBikeData) + 7);
 }
 
-static int dirconSendUnsolicitedCharacteristicNotificationMesg(Server *server, DirconSession *sess, const Uuid16 *charUuid)
+static int dirconSendUnsolicitedCharacteristicNotificationMesg(Server *server, DirconSession *sess, uint16_t charUuid)
 {
     UnsCharNot *unsCharNot = (UnsCharNot *) dirconInitMesg(server, UnsolicitedCharacteristicNotification, ++sess->lastTxReqSeqNum, SuccessRequest);
 
-    buildUuid128(&unsCharNot->charUuid, charUuid);
+    uint16ToUuid128(&unsCharNot->charUuid, charUuid);
     unsCharNot->hdr.mesgLen = sizeof (unsCharNot->charUuid);
 
-    if (uuid16Eq(charUuid, &indoorBikeDataUUID)) {
+    if (charUuid == indoorBikeData) {
         // Indoor Bike Data
         IndoorBikeData *ibd = (IndoorBikeData *) unsCharNot->data;
         unsCharNot->hdr.mesgLen += initIndoorBikeDataChar(server, ibd);
@@ -250,7 +250,7 @@ int dirconProcTimers(Server *server, const struct timeval *time)
         (tvCmp(time, &sess->nextNotification) >= 0)) {
         if (sess->ibdNotificationsEnabled) {
             // Send an Indoor Bike Data notification
-            dirconSendUnsolicitedCharacteristicNotificationMesg(server, sess, &indoorBikeDataUUID);
+            dirconSendUnsolicitedCharacteristicNotificationMesg(server, sess, indoorBikeData);
         }
 
 #ifdef CONFIG_FIT_ACTIVITY_FILE
@@ -345,19 +345,17 @@ static int dirconProcReadCharacteristicMesg(Server *server, DirconSession *sess,
 {
     ReadCharMesg *readChar = (ReadCharMesg *) mesg;
 
-    Uuid16 charUuid;
-
     if (mesg->mesgLen < sizeof (readChar->charUuid))
         return -1;
 
-    getUuid16(&charUuid, &readChar->charUuid);
+    uint16_t charUuid = uuid128ToUint16(readChar->charUuid);
 
     if (mesgType == request) {
         ReadCharMesg *resp = (ReadCharMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
         resp->charUuid = readChar->charUuid;
         resp->hdr.mesgLen = sizeof (resp->charUuid);
 
-        if (uuid16Eq(&charUuid, &fitnessMachineFeatureUUID)) {
+        if (charUuid == fitnessMachineFeature) {
             // Fitness Machine Features (FTMS 4.3.1.1)
             FitMachFeat *fmf = (FitMachFeat *) resp->data;
             uint32_t fmFeat = FMF_CADENCE | FMF_HEART_RATE_MEASURMENT | FMF_POWER_MEASUREMENT;
@@ -365,13 +363,13 @@ static int dirconProcReadCharacteristicMesg(Server *server, DirconSession *sess,
             putUINT32(fmf->fmFeat, fmFeat);
             putUINT32(fmf->tsFeat, tsFeat);
             resp->hdr.mesgLen += sizeof (FitMachFeat);
-        } else if (uuid16Eq(&charUuid, &trainingStatusUUID)) {
+        } else if (charUuid == trainingStatus) {
 
-        } else if (uuid16Eq(&charUuid, &supportedResistanceLevelRangeUUID)) {
+        } else if (charUuid == supportedResistanceLevelRange) {
 
-        } else if (uuid16Eq(&charUuid, &supportedPowerRangeUUID)) {
+        } else if (charUuid == supportedPowerRange) {
 
-        } else if (uuid16Eq(&charUuid, &fitnessMachineStatusUUID)) {
+        } else if (charUuid == fitnessMachineStatus) {
 
         } else {
             // This characteristic is not readable!

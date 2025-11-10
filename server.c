@@ -233,6 +233,16 @@ Service *serverFindService(const Server *server, const Uuid128 *uuid)
     return svc;
 }
 
+static int serverCreateFitnessMachineService(Server *server)
+{
+    if (serverAddService(server, &fitnessMachineServiceUUID) == NULL) {
+        mlog(error, "Failed to create FTMS service!");
+        return -1;
+    }
+
+    return 0;
+}
+
 const char *fmtSockaddr(const struct sockaddr_in *sockAddr, bool printPort)
 {
     static char fmtBuf[INET_ADDRSTRLEN + 7];    // "AAA.BBB.CCC.DDD[NNNNN]"
@@ -404,6 +414,12 @@ int serverInit(Server *server)
     TAILQ_INIT(&server->svcList);
 
     server->dirconSession.lastTxReqSeqNum = 0xff;
+
+    // Create the FTMS instance
+    if (serverCreateFitnessMachineService(server) != 0) {
+        mlog(error, "Failed to create FTMS!");
+        return -1;
+    }
 
 #ifdef CONFIG_FIT_ACTIVITY_FILE
     TAILQ_INIT(&server->trkPtList);
