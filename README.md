@@ -66,4 +66,4 @@ The output should look like this:
 
 Alternatively, you can use the Avahi Discovery app to check that the service is properly configured:
 
-![Avahi Discovery app](./Avahi-Discovery.png)
+![Avahi Discovery app](./assets/Avahi-Discovery.png)
