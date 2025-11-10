@@ -38,7 +38,6 @@ sudo systemctl restart avahi-daemon
 To ensure the new service is being advertised on the local network, you can use the avahi-browse utility:
 
 ``` bash
-sudo apt-get install avahi-utils avahi-discover
 avahi-browse -rt _wahoo-fitness-tnp._tcp
 ```
 
@@ -64,3 +63,7 @@ The output should look like this:
    port = [36866]
    txt = ["ble-services-uuids=0x1826" "mac-address=00-11-22-33-44-55" "serial-number=123456789"]
 ```
+
+Alternatively, you can use the Avahi Discovery app to check that the service is properly configured:
+
+![Avahi Discovery app](./Avahi-Discovery.png)
