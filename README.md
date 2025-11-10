@@ -35,7 +35,7 @@ sudo cp wahoo-fitness-tnp.service /etc/avahi/services/
 sudo systemctl restart avahi-daemon
 ```
 
-To ensure the new service is being advertised on the local network, you can use the avahi-browse:
+To ensure the new service is being advertised on the local network, you can use the avahi-browse utility:
 
 ``` bash
 sudo apt-get install avahi-utils avahi-discover
