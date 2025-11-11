@@ -630,9 +630,6 @@ int dirconProcMesg(Server *server)
         if (dirconSendMesg(server, sess, request, &unsCharNot->hdr) != 0) {
             mlog(error, "Failed to send NOTIFY message!");
         }
-        //if (server->cpRespInfo.giveCpSem) {
-        //    cpSemGive(server);
-        //}
         server->cpRespInfo.chr = NULL;
     }
 

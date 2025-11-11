@@ -570,6 +570,7 @@ int serverProcConnDrop(Server *server)
     sess->nextNotification.tv_sec = 0;
 
     // Clean up
+    server->controlGranted = false;
     sess->ibdNotificationsEnabled = false;
     sess->rxMesgCnt = 0;
     sess->txMesgCnt = 0;
