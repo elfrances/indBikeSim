@@ -113,40 +113,55 @@ static const char *fmtIndBikeSimParms(const IndBikeSimParms *ibsp)
     return fmtBuf.buf;
 }
 
-static const char *fmtFitMachCPOpCode(uint8_t opCode)
+const char *fmtFmcpOpCode(uint8_t opCode)
 {
     const char *name = "???";
 
     static const char *opCodeNameTbl[] = {
-        [FMCP_REQUEST_CONTROL] = "Request Control",
-        [FMCP_RESET] = "Reset",
-        [FMCP_SET_TGT_SPEED] = "Set Target Speed",
-        [FMCP_SET_TGT_INCLINATION] = "Set Target Inclination",
-        [FMCP_SET_TGT_RESISTANCE] = "Set Target Resistance",
-        [FMCP_SET_TGT_POWER] = "Set Target Power",
-        [FMCP_SET_TGT_HEART_RATE] = "Set Target Heart Rate",
-        [FMCP_START_OR_RESUME] = "Start or Resume",
-        [FMCP_STOP_OR_PAUSE] = "Stop or Pause",
-        [FMCP_SET_TGT_EXP_ENERGY] = "Set Target Exp Energy",
-        [FMCP_SET_TGT_NUM_STEPS] = "Set Target Number of Steps",
-        [FMCP_SET_TGT_NUM_STRIDES] = "Set Target Number of Strides",
-        [FMCP_SET_TGT_DISTANCE] = "Set Target Distance",
-        [FMCP_SET_TGT_TRAINING_TIME] = "Set Target Training Time",
-        [FMCP_SET_TGT_TIME_2_HRZ] = "Set Target Time in Two HR Zone",
-        [FMCP_SET_TGT_TIME_3_HRZ] = "Set Target Time in Three HR Zone",
-        [FMCP_SET_TGT_TIME_5_HRZ] = "Set Target Time in Five HR Zone",
-        [FMCP_SET_INDOOR_BIKE_SIM_PARMS] = "Set Indoor Bike Simulation Parameters",
-        [FMCP_SET_WHEEL_CIRCUMFERENCE] = "Set Wheel Circumference",
-        [FMCP_SET_SPIN_DOWN_CONTROL] = "Set Spin Down Control",
-        [FMCP_SET_TGT_CADENCE] = "Set Target Cadence",
+        [FMCP_REQUEST_CONTROL] = "REQUEST_CONTROL",
+        [FMCP_RESET] = "RESET",
+        [FMCP_SET_TGT_SPEED] = "SET_TGT_SPEED",
+        [FMCP_SET_TGT_INCLINATION] = "SET_TGT_INCLINATION",
+        [FMCP_SET_TGT_RESISTANCE] = "SET_TGT_RESISTANCE",
+        [FMCP_SET_TGT_POWER] = "SET_TGT_POWER",
+        [FMCP_SET_TGT_HEART_RATE] = "SET_TGT_HEART_RATE",
+        [FMCP_START_OR_RESUME] = "START_OR_RESUME",
+        [FMCP_STOP_OR_PAUSE] = "STOP_OR_PAUSE",
+        [FMCP_SET_TGT_EXP_ENERGY] = "SET_TGT_EXP_ENERGY",
+        [FMCP_SET_TGT_NUM_STEPS] = "SET_TGT_NUM_STEPS",
+        [FMCP_SET_TGT_NUM_STRIDES] = "SET_TGT_NUM_STRIDES",
+        [FMCP_SET_TGT_DISTANCE] = "SET_TGT_DISTANCE",
+        [FMCP_SET_TGT_TRAINING_TIME] = "SET_TGT_TRAINING_TIME",
+        [FMCP_SET_TGT_TIME_2_HRZ] = "SET_TGT_TIME_HRZ2",
+        [FMCP_SET_TGT_TIME_3_HRZ] = "SET_TGT_TIME_HRZ3",
+        [FMCP_SET_TGT_TIME_5_HRZ] = "SET_TGT_TIME_HRZ5",
+        [FMCP_SET_INDOOR_BIKE_SIM_PARMS] = "SET_INDOOR_BIKE_SIM_PARMS",
+        [FMCP_SET_WHEEL_CIRCUMFERENCE] = "SET_WHEEL_CIRCUMFERENCE",
+        [FMCP_SET_SPIN_DOWN_CONTROL] = "SET_SPIN_DOWN_CONTROL",
+        [FMCP_SET_TGT_CADENCE] = "SET_TGT_CADENCE",
     };
 
     if (opCode <= FMCP_SET_TGT_CADENCE)
         name = opCodeNameTbl[opCode];
-    else if (opCode == FMCP_SET_TGT_RESPONSE_CODE)
-        name = "Response Code";
 
     return name;
+}
+
+const char *fmtFmcpResultCode(uint8_t resCode)
+{
+    if (resCode == FMCP_RC_SUCCESS) {
+        return "Success";
+    } else if (resCode == FMCP_RC_OP_CODE_NOT_SUPPORTED) {
+        return "Opcode not supported";
+    } else if (resCode == FMCP_RC_INVALID_PARAMETER) {
+        return "Invalid parameter";
+    } else if (resCode == FMCP_RC_OPERATION_FAILED) {
+        return "Operation Failed";
+    } else if (resCode == FMCP_RC_CONTROL_NOT_PERMITTED) {
+        return "Control not permitted";
+    }
+
+    return "???";
 }
 
 static const char *fmtFitMachCP(const FitMachCP *fmcp, int fmcpLen)
@@ -157,7 +172,7 @@ static const char *fmtFitMachCP(const FitMachCP *fmcp, int fmcpLen)
 
     fmtBufInit(&fmtBuf, buf, sizeof (buf));
 
-    fmtBufAppend(&fmtBuf, "opCode: 0x%02x (%s)\n", fmcp->opCode, fmtFitMachCPOpCode(fmcp->opCode));
+    fmtBufAppend(&fmtBuf, "opCode: 0x%02x (%s)\n", fmcp->opCode, fmtFmcpOpCode(fmcp->opCode));
     if (fmcp->opCode == FMCP_SET_TGT_RESISTANCE) {
         fmtBufAppend(&fmtBuf, "targetResistance: %u\n", getUINT16(fmcp->parm));
     } else if (fmcp->opCode == FMCP_SET_TGT_POWER) {
@@ -367,6 +382,15 @@ static void dumpUnsolicitedCharacteristicNotificationMesg(const DirconMesg *pMes
         // Indoor Bike Data
         const IndoorBikeData *ibd = (IndoorBikeData *) mesg->data;
         fmtBufAppend(fmtBuf, "%s", fmtIndoorBikeData(ibd, dataLen));
+    } else if (uuid16 == fitnessMachineControlPoint) {
+        // Fitness Machine Control Point Procedure Complete Indication
+        FmcpInd *fmcpInd = (FmcpInd *) mesg->data;
+        if (fmcpInd->respCode == FMCP_RESPONSE_CODE) {
+            fmtBufAppend(&dumpFmtBuf, "reqOpCode: %s\nresultCode: %s (0x%02x)",
+                    fmtFmcpOpCode(fmcpInd->reqOpCode), fmtFmcpResultCode(fmcpInd->resultCode), fmcpInd->resultCode);
+        } else {
+            fmtBufAppend(&dumpFmtBuf, "respCode=0x%02x", fmcpInd->respCode);
+        }
     } else {
         fmtBufHexDump(fmtBuf, mesg->data, dataLen);
     }

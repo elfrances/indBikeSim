@@ -207,7 +207,24 @@ typedef struct FitMachCP FitMachCP;
 #define FMCP_SET_WHEEL_CIRCUMFERENCE    0x12U   // parm: UINT16 (mm)
 #define FMCP_SET_SPIN_DOWN_CONTROL      0x13U
 #define FMCP_SET_TGT_CADENCE            0x14U   // parm: UINT16 (rpm)
-#define FMCP_SET_TGT_RESPONSE_CODE      0x80U
+
+#define FMCP_RESPONSE_CODE  0x80U
+
+// Fitness Machine Control Point Procedure Complete (FTMS 4.16.2.22)
+struct FmcpInd {
+    uint8_t respCode;   // FMCP_RESPONSE_CODE
+    uint8_t reqOpCode;  // the opCode of the request op this notification is for
+    uint8_t resultCode; // see below
+} __attribute__((packed));
+typedef struct FmcpInd FmcpInd;
+
+// Result Code for the Fitness Machine Control Point (FTMS Table 4.24)
+#define FMCP_RC_RFU                     0x00U
+#define FMCP_RC_SUCCESS                 0x01U
+#define FMCP_RC_OP_CODE_NOT_SUPPORTED   0x02U
+#define FMCP_RC_INVALID_PARAMETER       0x03U
+#define FMCP_RC_OPERATION_FAILED        0x04U
+#define FMCP_RC_CONTROL_NOT_PERMITTED   0x05U
 
 // Indoor Bike Simulation Parameters (FTMS 4.16.2.18)
 struct IndBikeSimParms {

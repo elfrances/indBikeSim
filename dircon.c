@@ -393,6 +393,14 @@ static int dirconProcReadCharacteristicMesg(Server *server, DirconSession *sess,
     return 0;
 }
 
+static void schedFmcpNotification(Server *server, const Characteristic *chr, uint8_t opCode, uint8_t resultCode)
+{
+    server->cpRespInfo.chr = chr;
+    server->cpRespInfo.respCode = FMCP_RESPONSE_CODE;
+    server->cpRespInfo.reqOpCode = opCode;
+    server->cpRespInfo.resultCode = resultCode;
+}
+
 static int dirconProcWriteCharacteristicMesg(Server *server, DirconSession *sess, MesgType mesgType, const DirconMesg *mesg)
 {
     WriteCharMesg *writeChar = (WriteCharMesg *) mesg;
@@ -417,9 +425,29 @@ static int dirconProcWriteCharacteristicMesg(Server *server, DirconSession *sess
     if (chr->uuid16 == fitnessMachineControlPoint) {
         // Fitness Machine Control Point
         const FitMachCP *fmcp = (FitMachCP *) writeChar->data;
-        if (fmcp->opCode == FMCP_SET_INDOOR_BIKE_SIM_PARMS) {
-            server->actInProg = true;
+        int resultCode = FMCP_RC_SUCCESS;
+        if ((fmcp->opCode != FMCP_REQUEST_CONTROL) && !server->controlGranted) {
+            resultCode = FMCP_RC_CONTROL_NOT_PERMITTED;
+        } else if (fmcp->opCode == FMCP_REQUEST_CONTROL) {
+            server->controlGranted = true;
+        } else if (fmcp->opCode == FMCP_RESET) {
+            server->controlGranted = false;
+        } else if (fmcp->opCode == FMCP_SET_TGT_POWER) {
+            // TBD
+        } else if (fmcp->opCode == FMCP_START_OR_RESUME) {
+            // TBD
+        } else if (fmcp->opCode == FMCP_STOP_OR_PAUSE) {
+            // TBD
+        } else if (fmcp->opCode == FMCP_SET_INDOOR_BIKE_SIM_PARMS) {
+            // TBD
+        } else if (fmcp->opCode == FMCP_SET_WHEEL_CIRCUMFERENCE) {
+            // TBD
+        } else {
+            resultCode = FMCP_RC_OP_CODE_NOT_SUPPORTED;
         }
+
+        // Schedule the NOTIFICATION that follows the WRITE Response
+        schedFmcpNotification(server, chr, fmcp->opCode, resultCode);
     } else {
         // Hu?
         resp->hdr.respCode = UnexpectedError;
@@ -585,6 +613,29 @@ int dirconProcMesg(Server *server)
     }
 
     // Call the Rx message handler to do the work!
-    return (*rxMesgHandler[mesg->mesgId])(server, sess, mesgType, mesg);
+    (*rxMesgHandler[mesg->mesgId])(server, sess, mesgType, mesg);
+
+    // Do we have to send a NOTIFY to complete a WRITE to a
+    // Control Point characteristic? This happens whenever:
+    //   (1) it is a mock characteristic
+    //   (2) it is a real characteristic but the WRITE was suppressed
+    //
+    if (server->cpRespInfo.chr != NULL) {
+        UnsCharNot *unsCharNot = (UnsCharNot *) dirconInitMesg(server, UnsolicitedCharacteristicNotification, ++sess->lastTxReqSeqNum, SuccessRequest);
+        unsCharNot->charUuid = server->cpRespInfo.chr->uuid;
+        unsCharNot->data[0] = server->cpRespInfo.respCode;
+        unsCharNot->data[1] = server->cpRespInfo.reqOpCode;
+        unsCharNot->data[2] = server->cpRespInfo.resultCode;
+        unsCharNot->hdr.mesgLen = sizeof (unsCharNot->charUuid) + 3;
+        if (dirconSendMesg(server, sess, request, &unsCharNot->hdr) != 0) {
+            mlog(error, "Failed to send NOTIFY message!");
+        }
+        //if (server->cpRespInfo.giveCpSem) {
+        //    cpSemGive(server);
+        //}
+        server->cpRespInfo.chr = NULL;
+    }
+
+    return 0;
 }
 

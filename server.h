@@ -77,6 +77,14 @@ typedef enum MesgDir {
 // Max number of arguments in a CLI command
 #define MAX_ARGS    8
 
+// Control Point response info
+typedef struct CpRespInfo {
+    const Characteristic *chr;  // the characteristic to use for the NOTIFY message
+    uint8_t respCode;           // the response code
+    uint8_t reqOpCode;          // the opCode of the request op this notification is for
+    uint8_t resultCode;         // result code of the requested operation
+} CpRespInfo;
+
 // DIRCON Server
 typedef struct Server {
     int stdinFd;                    // file descriptor of stdin stream
@@ -101,6 +109,8 @@ typedef struct Server {
 
     struct timeval baseTime;        // base time used to generate relative timestamps
 
+    CpRespInfo cpRespInfo;
+
     // Rx/Tx message buffers
     uint8_t rxMesgBuf[MAX_MESG_LEN];
     uint8_t txMesgBuf[MAX_MESG_LEN];
@@ -120,10 +130,10 @@ typedef struct Server {
     int dissectMesgId;
 
     bool actInProg;                 // activity in progress
+    bool controlGranted;
     bool dissect;
     bool exit;
     bool hexDumpMesg;
-    bool mesgForwarding;
     bool noMdns;
 } Server;
 

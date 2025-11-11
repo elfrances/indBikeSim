@@ -23,7 +23,7 @@
 // Defining (undefining) the option includes (excludes) the feature.
 
 // Command Line Interface: adds an interactive CLI helpful for debugging
-#define CONFIG_CLI
+#undef CONFIG_CLI
 
 // FIT activity file: allows the app to use the metrics from a FIT file
 // to generate the cadence, heart rate, and power values.
