@@ -64,7 +64,7 @@ static void fitRecToTrkPt(const FIT_RECORD_MESG *record, TrkPt *tp)
     }
 
     if (record->cadence != FIT_UINT8_INVALID) {
-        tp->cadence = record->cadence;
+        tp->cadence = record->cadence * 2;
     }
 
     if (record->heart_rate != FIT_UINT8_INVALID) {
@@ -73,6 +73,12 @@ static void fitRecToTrkPt(const FIT_RECORD_MESG *record, TrkPt *tp)
 
     if (record->power != FIT_UINT16_INVALID) {
         tp->power = record->power;
+    }
+
+    if (record->enhanced_speed != FIT_UINT32_INVALID) {
+        tp->speed = (((double) record->enhanced_speed / 1000.0) / 3.6) * 100;  // FTMS speed unit is 0.01 km/h
+    } else if (record->speed != FIT_UINT16_INVALID) {
+        tp->speed = (((double) record->speed / 1000.0) / 3.6) * 100;   // FTMS speed unit is 0.01 km/h
     }
 
     //mlog(info, "timestamp=%ld cadence=%u heartRate=%u power=%u",

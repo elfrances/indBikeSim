@@ -108,9 +108,10 @@ typedef struct Server {
     uint32_t rxMdnsMesgCnt;
     uint32_t txMdnsMesgCnt;
 
-    uint16_t cadence;               // Cadence [RPM]
+    uint16_t cadence;               // Cadence [RPM] X2
     uint16_t heartRate;             // Heart Rate [BPM]
     uint16_t power;                 // Power [Watts]
+    uint16_t speed;                 // Speed [km/h] X100
 
     uint16_t minPower;
     uint16_t maxPower;

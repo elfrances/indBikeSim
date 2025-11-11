@@ -198,7 +198,7 @@ int dirconSendReadCharacteristicMesg(Server *server, DirconSession *sess, const 
 static uint16_t initIndoorBikeDataChar(Server *server, IndoorBikeData *ibd)
 {
     uint16_t flags = IBD_INSTANTANEOUS_CADENCE | IBD_INSTANTANEOUS_POWER | IBD_HEART_RATE;
-    uint16_t speed = 0;
+    uint16_t speed = server->speed;
     uint16_t cadence = server->cadence;
     uint16_t power = server->power;
     uint8_t heartRate = server->heartRate;
@@ -206,6 +206,7 @@ static uint16_t initIndoorBikeDataChar(Server *server, IndoorBikeData *ibd)
     TrkPt *tp = TAILQ_FIRST(&server->trkPtList);
 
     if ((tp != NULL) && server->actInProg) {
+        speed = tp->speed;
         cadence = tp->cadence;
         power = tp->power;
         heartRate = tp->heartRate;
@@ -213,10 +214,10 @@ static uint16_t initIndoorBikeDataChar(Server *server, IndoorBikeData *ibd)
 #endif
 
     putUINT16(ibd->flags,flags);
-    putUINT16(&ibd->data[0], speed);            // speed
-    putUINT16(&ibd->data[2], (cadence / 0.5));  // cadence
-    putUINT16(&ibd->data[4], power);            // power
-    putUINT8(&ibd->data[6], heartRate);         // HR
+    putUINT16(&ibd->data[0], speed);    // speed
+    putUINT16(&ibd->data[2], cadence);  // cadence
+    putUINT16(&ibd->data[4], power);    // power
+    putUINT8(&ibd->data[6], heartRate); // HR
 
     return (sizeof (IndoorBikeData) + 7);
 }
@@ -242,10 +243,8 @@ static int dirconSendUnsolicitedCharacteristicNotificationMesg(Server *server, D
 
 int dirconProcTimers(Server *server, const struct timeval *time)
 {
-    DirconSession *sess;
+    DirconSession *sess = &server->dirconSession;
 
-    // App session
-    sess = &server->dirconSession;
     if ((sess->nextNotification.tv_sec != 0) &&
         (tvCmp(time, &sess->nextNotification) >= 0)) {
         if (sess->ibdNotificationsEnabled) {

@@ -90,9 +90,13 @@ static const char *help =
         "    --power <val>\n"
         "        Specifies a fixed pedal power value (in Watts) to be sent\n"
         "        in the periodic 'Indoor Bike Data' notifications.\n"
-        "    --supported-power-range min,max,inc\n"
+        "    --speed <val>\n"
+        "        Specifies a fixed speed value (in km/h) to be sent\n"
+        "        in the periodic 'Indoor Bike Data' notifications.\n"
+        "    --supported-power-range <min,max,inc>\n"
         "        Specifies the minimum, maximum, and increment power values\n"
         "        (in Watts) used by the Supported Power Range characteristic.\n"
+        "        Default is 0,1500,1."
         "    --tcp-port <num>\n"
         "        Specifies the TCP port to use. Default is 36866.\n"
         "    --version\n"
@@ -151,7 +155,7 @@ static int parseArgs(int argc, char **argv, Server *server)
             if (sscanf(val, "%hu", &cadence) != 1) {
                 return invalidArgument(arg, val);
             }
-            server->cadence = cadence;
+            server->cadence = cadence * 2;  // FTMS cadence unit is 0.5 RPM
         } else if (strcmp(arg, "--dissect") == 0) {
             int dissectMesgId;
             if ((val = argv[++n]) == NULL) {
@@ -230,6 +234,15 @@ static int parseArgs(int argc, char **argv, Server *server)
                 return invalidArgument(arg, val);
             }
             server->power = power;
+        } else if (strcmp(arg, "--speed") == 0) {
+            uint16_t speed;
+            if ((val = argv[++n]) == NULL) {
+                return missingArgValue(arg);
+            }
+            if (sscanf(val, "%hu", &speed) != 1) {
+                return invalidArgument(arg, val);
+            }
+            server->speed = speed * 100;    // FTMS speed unit is 0.01 km/h
         } else if (strcmp(arg, "--supported-power-range") == 0) {
             uint16_t minPwr, maxPwr, incPwr;
             if ((val = argv[++n]) == NULL) {

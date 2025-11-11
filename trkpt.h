@@ -40,6 +40,7 @@ typedef struct TrkPt {
     uint32_t cadence;   // cadence (in RPM)
     uint32_t heartRate; // heart rate (in BPM)
     uint32_t power;     // power (in Watts)
+    uint32_t speed;     // speed (in km/h)
 } TrkPt;
 
 __BEGIN_DECLS
