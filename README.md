@@ -64,6 +64,6 @@ The output should look like this:
    txt = ["ble-service-uuids=0x1826" "mac-address=6c:4b:90:33:b3:f1" "serial-number=123456789"]
 ```
 
-Alternatively, you can use the Avahi Discovery app to check that the service is properly configured. In the example below the service was advertised by the Ubuntu laptop "ideapad" over its WiFi interface wlp3s0:
+Alternatively, you can use the Avahi Discovery app to check that the service is properly configured. In the example below the service was advertised by the Ubuntu host "milou" over its wired network interface enp2s0:
 
 ![Avahi Discovery app](./assets/Avahi-Discovery.png)
