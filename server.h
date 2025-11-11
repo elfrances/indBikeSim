@@ -135,6 +135,7 @@ extern int serverRun(Server *server);
 
 extern Service *serverAddService(Server *server, const Uuid128 *uuid);
 extern Service *serverFindService(const Server *server, const Uuid128 *uuid);
+extern Characteristic *serverFindCharacteristicByUuid128(const Server *server, const Uuid128 *uuid);
 
 extern const char *fmtSockaddr(const struct sockaddr_in *sockAddr, bool printPort);
 

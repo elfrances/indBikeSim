@@ -279,22 +279,29 @@ static int addService(Uuid128 *svcUuid, const Service *svc)
     return sizeof (Uuid128);
 }
 
+// Common error response handler for ReadCharacteristic,
+// WriteCharacteristic, and EnableCharacteristicNotifications.
+static int dirconSendErrorResp(Server *server, DirconSession *sess, const DirconMesg *mesg, DirconRespCode respCode, const Uuid128 *uuid)
+{
+    ReadCharMesg *resp = (ReadCharMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, respCode);
+    resp->charUuid = *uuid;
+
+    return dirconSendMesg(server, sess, response, (DirconMesg *) resp);
+}
+
 static int dirconProcDiscoverServicesMesg(Server *server, DirconSession *sess, MesgType mesgType, const DirconMesg *mesg)
 {
+    DiscSvcsMesg *resp = (DiscSvcsMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
+    Uuid128 *svcUuid = resp->svcUuid;
     Service *svc;
 
-    if (mesgType == request) {
-        DiscSvcsMesg *resp = (DiscSvcsMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
-        Uuid128 *svcUuid = resp->svcUuid;
-
-        // Add all the services discovered so far...
-        TAILQ_FOREACH(svc, &server->svcList, svcListEnt) {
-            resp->hdr.mesgLen += addService(svcUuid++, svc);
-        }
-
-        // Send response!
-        dirconSendMesg(server, sess, response, (DirconMesg *) resp);
+    // Add all the services discovered so far...
+    TAILQ_FOREACH(svc, &server->svcList, svcListEnt) {
+        resp->hdr.mesgLen += addService(svcUuid++, svc);
     }
+
+    // Send response!
+    dirconSendMesg(server, sess, response, (DirconMesg *) resp);
 
     return 0;
 }
@@ -310,19 +317,19 @@ static int dirconProcDiscoverCharacteristicsMesg(Server *server, DirconSession *
 {
     DiscCharsMesg *discChars = (DiscCharsMesg *) mesg;
     const Uuid128 *svcUuid = &discChars->svcUuid;
-    Service *svc = serverFindService(server, svcUuid);
+    Service *svc;
 
     if (mesg->mesgLen < sizeof (discChars->svcUuid))
         return -1;
 
-    if (mesgType == request) {
+    {
         DiscCharsMesg *resp = (DiscCharsMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
+        resp->svcUuid = discChars->svcUuid;
+        resp->hdr.mesgLen = sizeof (resp->svcUuid);
 
-        if (svc != NULL) {
+        if ((svc = serverFindService(server, svcUuid)) != NULL) {
             Characteristic *chr;
             CharProp *prop = resp->charProp;
-            resp->svcUuid = discChars->svcUuid;
-            resp->hdr.mesgLen = sizeof (resp->svcUuid);
 
             // Add all the characteristics in this service
             // to the response...
@@ -348,42 +355,41 @@ static int dirconProcReadCharacteristicMesg(Server *server, DirconSession *sess,
     if (mesg->mesgLen < sizeof (readChar->charUuid))
         return -1;
 
-    uint16_t charUuid = uuid128ToUint16(&readChar->charUuid);
+    Characteristic *chr = serverFindCharacteristicByUuid128(server, &readChar->charUuid);
 
-    if (mesgType == request) {
-        ReadCharMesg *resp = (ReadCharMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
-        resp->charUuid = readChar->charUuid;
-        resp->hdr.mesgLen = sizeof (resp->charUuid);
-
-        if (charUuid == fitnessMachineFeature) {
-            // Fitness Machine Features (FTMS 4.3.1.1)
-            FitMachFeat *fmf = (FitMachFeat *) resp->data;
-            uint32_t fmFeat = FMF_CADENCE | FMF_HEART_RATE_MEASURMENT | FMF_POWER_MEASUREMENT;
-            uint32_t tsFeat = TSF_POWER | TSF_INDOOR_BIKE_SIM_PARMS;
-            putUINT32(fmf->fmFeat, fmFeat);
-            putUINT32(fmf->tsFeat, tsFeat);
-            resp->hdr.mesgLen += sizeof (FitMachFeat);
-        } else if (charUuid == supportedPowerRange) {
-            // Supported Power Range (FTMS 4.14)
-            putUINT16(&resp->data[0], server->minPower);
-            putUINT16(&resp->data[2], server->maxPower);
-            putUINT16(&resp->data[4], server->incPower);
-            resp->hdr.mesgLen += 6;
-        } else {
-            // This characteristic is not readable!
-            resp->hdr.respCode = CharacteristicOperationNotSupported;
-        }
-
-        // Send response!
-        dirconSendMesg(server, sess, response, (DirconMesg *) resp);
-    } else {
-        // Check the response code
-        if (mesg->respCode != SuccessRequest) {
-            mlog(error, "Transaction failed: seqNum=%u respCode=%u", mesg->seqNum, mesg->respCode);
-        }
-
-        sess->respPend = false;
+    if (chr == NULL) {
+        return dirconSendErrorResp(server, sess, mesg, CharacteristicNotFound, &readChar->charUuid);
     }
+
+    if (!(chr->properties & DIRCON_CHAR_PROP_READ)) {
+        return dirconSendErrorResp(server, sess, mesg, CharacteristicOperationNotSupported, &readChar->charUuid);
+    }
+
+    ReadCharMesg *resp = (ReadCharMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
+    resp->charUuid = readChar->charUuid;
+    resp->hdr.mesgLen = sizeof (resp->charUuid);
+
+    if (chr->uuid16 == fitnessMachineFeature) {
+        // Fitness Machine Features (FTMS 4.3.1.1)
+        FitMachFeat *fmf = (FitMachFeat *) resp->data;
+        uint32_t fmFeat = FMF_CADENCE | FMF_HEART_RATE_MEASURMENT | FMF_POWER_MEASUREMENT;
+        uint32_t tsFeat = TSF_POWER | TSF_INDOOR_BIKE_SIM_PARMS;
+        putUINT32(fmf->fmFeat, fmFeat);
+        putUINT32(fmf->tsFeat, tsFeat);
+        resp->hdr.mesgLen += sizeof (FitMachFeat);
+    } else if (chr->uuid16 == supportedPowerRange) {
+        // Supported Power Range (FTMS 4.14)
+        putUINT16(&resp->data[0], server->minPower);
+        putUINT16(&resp->data[2], server->maxPower);
+        putUINT16(&resp->data[4], server->incPower);
+        resp->hdr.mesgLen += 6;
+    } else {
+        // Hu?
+        resp->hdr.respCode = UnexpectedError;
+    }
+
+    // Send response!
+    dirconSendMesg(server, sess, response, (DirconMesg *) resp);
 
     return 0;
 }
@@ -395,34 +401,33 @@ static int dirconProcWriteCharacteristicMesg(Server *server, DirconSession *sess
     if (mesg->mesgLen < sizeof (writeChar->charUuid))
         return -1;
 
-    uint16_t charUuid = uuid128ToUint16(&writeChar->charUuid);
+    Characteristic *chr = serverFindCharacteristicByUuid128(server, &writeChar->charUuid);
 
-    if (mesgType == request) {
-        WriteCharMesg *resp = (WriteCharMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
-        resp->charUuid = writeChar->charUuid;
-        resp->hdr.mesgLen = sizeof (resp->charUuid);
-
-        if (charUuid == fitnessMachineControlPoint) {
-            // Fitness Machine Control Point
-            const FitMachCP *fmcp = (FitMachCP *) writeChar->data;
-            if (fmcp->opCode == FMCP_SET_INDOOR_BIKE_SIM_PARMS) {
-                server->actInProg = true;
-            }
-        } else {
-            // This characteristic is not writable!
-            resp->hdr.respCode = CharacteristicOperationNotSupported;
-        }
-
-        // Send response!
-        dirconSendMesg(server, sess, response, (DirconMesg *) resp);
-    } else {
-        // Check the response code
-        if (mesg->respCode != SuccessRequest) {
-            mlog(error, "Transaction failed: seqNum=%u respCode=%u", mesg->seqNum, mesg->respCode);
-        }
-
-        sess->respPend = false;
+    if (chr == NULL) {
+        return dirconSendErrorResp(server, sess, mesg, CharacteristicNotFound, &writeChar->charUuid);
     }
+
+    if (!(chr->properties & DIRCON_CHAR_PROP_WRITE)) {
+        return dirconSendErrorResp(server, sess, mesg, CharacteristicOperationNotSupported, &writeChar->charUuid);
+    }
+
+    WriteCharMesg *resp = (WriteCharMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
+    resp->charUuid = writeChar->charUuid;
+    resp->hdr.mesgLen = sizeof (resp->charUuid);
+
+    if (chr->uuid16 == fitnessMachineControlPoint) {
+        // Fitness Machine Control Point
+        const FitMachCP *fmcp = (FitMachCP *) writeChar->data;
+        if (fmcp->opCode == FMCP_SET_INDOOR_BIKE_SIM_PARMS) {
+            server->actInProg = true;
+        }
+    } else {
+        // Hu?
+        resp->hdr.respCode = UnexpectedError;
+    }
+
+    // Send response!
+    dirconSendMesg(server, sess, response, (DirconMesg *) resp);
 
     return 0;
 }
@@ -435,51 +440,50 @@ static int dirconProcEnableCharacteristicNotificationsMesg(Server *server, Dirco
     if (mesg->mesgLen < sizeof (Uuid128))
         return -1;
 
-    uint16_t charUuid = uuid128ToUint16(&enCharNot->charUuid);
+    Characteristic *chr = serverFindCharacteristicByUuid128(server, &enCharNot->charUuid);
+
+    if (chr == NULL) {
+        return dirconSendErrorResp(server, sess, mesg, CharacteristicNotFound, &enCharNot->charUuid);
+    }
+
+    if (!(chr->properties & DIRCON_CHAR_PROP_NOTIFY)) {
+        return dirconSendErrorResp(server, sess, mesg, CharacteristicOperationNotSupported, &enCharNot->charUuid);
+    }
 
     gettimeofday(&now, NULL);
 
-    if (mesgType == request) {
-        bool enable = (enCharNot->enable & 0x01) ? true : false;
-        EnCharNotMesg *resp = (EnCharNotMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
-        resp->charUuid = enCharNot->charUuid;
-        resp->enable = enCharNot->enable;
-        resp->hdr.mesgLen = sizeof (resp->charUuid);
-        if (charUuid == indoorBikeData) {
-            // Indoor Bike Data
-            if (enable) {
-                if (sess->nextNotification.tv_sec == 0) {
-                    // Start the notification timer with a 1-sec expiry
-                    sess->nextNotification = now;
-                    sess->nextNotification.tv_sec++;
-                }
+    bool enable = (enCharNot->enable & 0x01) ? true : false;
+    EnCharNotMesg *resp = (EnCharNotMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
+    resp->charUuid = enCharNot->charUuid;
+    resp->enable = enCharNot->enable;
+    resp->hdr.mesgLen = sizeof (resp->charUuid);
+
+    if (chr->uuid16 == indoorBikeData) {
+        // Indoor Bike Data
+        if (enable) {
+            if (sess->nextNotification.tv_sec == 0) {
+                // Start the notification timer with a 1-sec expiry
+                sess->nextNotification = now;
+                sess->nextNotification.tv_sec++;
             }
-            sess->ibdNotificationsEnabled = enable;
-        } else if (charUuid == trainingStatus) {
-            // Training Status
-            //   TBD
-        } else if (charUuid == fitnessMachineControlPoint) {
-            // Fitness Machine Control Point
-            sess->fmcpNotificationsEnabled = enable;
-        } else if (charUuid == fitnessMachineStatus) {
-            // Fitness Machine Status
-            //   TBD
         } else {
-            // Notifications not supported on this
-            // characteristic!
-            resp->hdr.respCode = CharacteristicOperationNotSupported;
+            sess->nextNotification.tv_sec = 0;
+            sess->nextNotification.tv_usec = 0;
         }
-
-        // Send response!
-        dirconSendMesg(server, sess, response, (DirconMesg *) resp);
+        sess->ibdNotificationsEnabled = enable;
+    } else if (chr->uuid16 == fitnessMachineControlPoint) {
+        // Fitness Machine Control Point
+        sess->fmcpNotificationsEnabled = enable;
+    } else if (chr->uuid16 == fitnessMachineStatus) {
+        // Fitness Machine Status
+        //   TBD
     } else {
-        // Check the response code
-        if (mesg->respCode != SuccessRequest) {
-            mlog(error, "Transaction failed: seqNum=%u respCode=%u", mesg->seqNum, mesg->respCode);
-        }
-
-        sess->respPend = false;
+        // Hu?
+        resp->hdr.respCode = UnexpectedError;
     }
+
+    // Send response!
+    dirconSendMesg(server, sess, response, (DirconMesg *) resp);
 
     return 0;
 }
@@ -571,6 +575,14 @@ int dirconProcMesg(Server *server)
 
     if (server->dissect) {
         dirconDumpMesg(&timestamp, server, sess, RxDir, mesgType, mesg);
+    }
+
+    // We only expect request messages from the virtual cycling
+    // app, so we silently drop any unsolicited response messages.
+    if (mesgType != request) {
+        mlog(warning, "Unsolicited response message: mesgId=%u seqNum=%u respCode=%u mesgLen=%u (lastRxReqSeqNum=%u)",
+                mesg->mesgId, mesg->seqNum, mesg->respCode, mesg->mesgLen, sess->lastRxReqSeqNum);
+        return 0;
     }
 
     // Call the Rx message handler to do the work!

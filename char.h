@@ -26,6 +26,7 @@
 typedef struct Characteristic {
     TAILQ_ENTRY(Characteristic) charListEnt;    // node in the charList
     Uuid128 uuid;
+    uint16_t uuid16;
     uint8_t properties;
 
     uint16_t connHandle;

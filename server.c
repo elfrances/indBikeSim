@@ -233,6 +233,22 @@ Service *serverFindService(const Server *server, const Uuid128 *uuid)
     return svc;
 }
 
+Characteristic *serverFindCharacteristicByUuid128(const Server *server, const Uuid128 *uuid)
+{
+    Service *svc;
+    TAILQ_FOREACH(svc, &server->svcList, svcListEnt) {
+        Characteristic *chr;
+        TAILQ_FOREACH(chr, &svc->charList, charListEnt) {
+            if (uuid128Eq(&chr->uuid, uuid)) {
+                // Found it!
+                return chr;
+            }
+        }
+    }
+
+    return NULL;
+}
+
 static int serverCreateFitnessMachineService(Server *server)
 {
     Uuid128 uuid128;

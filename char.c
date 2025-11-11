@@ -27,6 +27,7 @@ Characteristic *charNew(const Uuid128 *uuid)
 
     if (ch != NULL) {
         ch->uuid = *uuid;
+        ch->uuid16 = uuid128ToUint16(uuid);
     }
 
     return ch;
