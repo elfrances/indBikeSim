@@ -348,7 +348,7 @@ static int dirconProcReadCharacteristicMesg(Server *server, DirconSession *sess,
     if (mesg->mesgLen < sizeof (readChar->charUuid))
         return -1;
 
-    uint16_t charUuid = uuid128ToUint16(readChar->charUuid);
+    uint16_t charUuid = uuid128ToUint16(&readChar->charUuid);
 
     if (mesgType == request) {
         ReadCharMesg *resp = (ReadCharMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
@@ -359,18 +359,16 @@ static int dirconProcReadCharacteristicMesg(Server *server, DirconSession *sess,
             // Fitness Machine Features (FTMS 4.3.1.1)
             FitMachFeat *fmf = (FitMachFeat *) resp->data;
             uint32_t fmFeat = FMF_CADENCE | FMF_HEART_RATE_MEASURMENT | FMF_POWER_MEASUREMENT;
-            uint32_t tsFeat = TSF_RESISTANCE | TSF_POWER | TSF_INDOOR_BIKE_SIM_PARMS;
+            uint32_t tsFeat = TSF_POWER | TSF_INDOOR_BIKE_SIM_PARMS;
             putUINT32(fmf->fmFeat, fmFeat);
             putUINT32(fmf->tsFeat, tsFeat);
             resp->hdr.mesgLen += sizeof (FitMachFeat);
-        } else if (charUuid == trainingStatus) {
-
-        } else if (charUuid == supportedResistanceLevelRange) {
-
         } else if (charUuid == supportedPowerRange) {
-
-        } else if (charUuid == fitnessMachineStatus) {
-
+            // Supported Power Range (FTMS 4.14)
+            putUINT16(&resp->data[0], server->minPower);
+            putUINT16(&resp->data[2], server->maxPower);
+            putUINT16(&resp->data[4], server->incPower);
+            resp->hdr.mesgLen += 6;
         } else {
             // This characteristic is not readable!
             resp->hdr.respCode = CharacteristicOperationNotSupported;
@@ -394,19 +392,17 @@ static int dirconProcWriteCharacteristicMesg(Server *server, DirconSession *sess
 {
     WriteCharMesg *writeChar = (WriteCharMesg *) mesg;
 
-    Uuid16 charUuid;
-
     if (mesg->mesgLen < sizeof (writeChar->charUuid))
         return -1;
 
-    getUuid16(&charUuid, &writeChar->charUuid);
+    uint16_t charUuid = uuid128ToUint16(&writeChar->charUuid);
 
     if (mesgType == request) {
         WriteCharMesg *resp = (WriteCharMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
         resp->charUuid = writeChar->charUuid;
         resp->hdr.mesgLen = sizeof (resp->charUuid);
 
-        if (uuid16Eq(&charUuid, &fitnessMachineControlPointUUID)) {
+        if (charUuid == fitnessMachineControlPoint) {
             // Fitness Machine Control Point
             const FitMachCP *fmcp = (FitMachCP *) writeChar->data;
             if (fmcp->opCode == FMCP_SET_INDOOR_BIKE_SIM_PARMS) {
@@ -433,24 +429,23 @@ static int dirconProcWriteCharacteristicMesg(Server *server, DirconSession *sess
 
 static int dirconProcEnableCharacteristicNotificationsMesg(Server *server, DirconSession *sess, MesgType mesgType, const DirconMesg *mesg)
 {
-    EnCharNotMesg *req = (EnCharNotMesg *) mesg;
-    Uuid16 charUuid;
+    EnCharNotMesg *enCharNot = (EnCharNotMesg *) mesg;
     struct timeval now;
 
     if (mesg->mesgLen < sizeof (Uuid128))
         return -1;
 
-    getUuid16(&charUuid, &req->charUuid);
+    uint16_t charUuid = uuid128ToUint16(&enCharNot->charUuid);
 
     gettimeofday(&now, NULL);
 
     if (mesgType == request) {
-        bool enable = (req->enable & 0x01) ? true : false;
+        bool enable = (enCharNot->enable & 0x01) ? true : false;
         EnCharNotMesg *resp = (EnCharNotMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
-        resp->charUuid = req->charUuid;
-        resp->enable = req->enable;
+        resp->charUuid = enCharNot->charUuid;
+        resp->enable = enCharNot->enable;
         resp->hdr.mesgLen = sizeof (resp->charUuid);
-        if (uuid16Eq(&charUuid, &indoorBikeDataUUID)) {
+        if (charUuid == indoorBikeData) {
             // Indoor Bike Data
             if (enable) {
                 if (sess->nextNotification.tv_sec == 0) {
@@ -460,13 +455,13 @@ static int dirconProcEnableCharacteristicNotificationsMesg(Server *server, Dirco
                 }
             }
             sess->ibdNotificationsEnabled = enable;
-        } else if (uuid16Eq(&charUuid, &trainingStatusUUID)) {
+        } else if (charUuid == trainingStatus) {
             // Training Status
             //   TBD
-        } else if (uuid16Eq(&charUuid, &fitnessMachineControlPointUUID)) {
+        } else if (charUuid == fitnessMachineControlPoint) {
             // Fitness Machine Control Point
             sess->fmcpNotificationsEnabled = enable;
-        } else if (uuid16Eq(&charUuid, &fitnessMachineStatusUUID)) {
+        } else if (charUuid == fitnessMachineStatus) {
             // Fitness Machine Status
             //   TBD
         } else {

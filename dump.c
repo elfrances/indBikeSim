@@ -294,18 +294,17 @@ static void dumpReadCharacteristicMesg(const DirconMesg *pMesg, int mesgLen, Mes
     fmtBufAppend(fmtBuf, "charUUID: %s (%s)\n", fmtUuid128(&mesg->charUuid), fmtUuid128Name(&mesg->charUuid));
 
     if (mesgType == response) {
-        Uuid16 uuid16;
+        uint16_t uuid16 = uuid128ToUint16(&mesg->charUuid);
         size_t dataLen = (mesgLen - sizeof (Uuid128));
 
-        getUuid16(&uuid16, &mesg->charUuid);
-        if (uuid16Eq(&uuid16, &fitnessMachineFeatureUUID)) {
+        if (uuid16 == fitnessMachineFeature) {
             const FitMachFeat *fmf = (FitMachFeat *) mesg->data;
             fmtBufAppend(fmtBuf, "fitnessMachineFeatures: 0x%08" PRIx32 "\n", (getUINT32(fmf->fmFeat) & ~FMF_RFU));
             fmtBufAppend(fmtBuf, "targetSettingFeatures: 0x%08" PRIx32 "\n", (getUINT32(fmf->tsFeat) & ~TSF_RFU));
-        } else if (uuid16Eq(&uuid16, &indoorBikeDataUUID)) {
+        } else if (uuid16 == indoorBikeData) {
             const IndoorBikeData *ibd = (IndoorBikeData *) mesg->data;
             fmtBufAppend(fmtBuf, "%s", fmtIndoorBikeData(ibd, dataLen));
-        } else if (uuid16Eq(&uuid16, &trainingStatusUUID)) {
+        } else if (uuid16 == trainingStatus) {
             const TrainingStatus *trStat = (TrainingStatus *) mesg->data;
             int strLen = (dataLen - sizeof (TrainingStatus));
             fmtBufAppend(fmtBuf, "flags: 0x%02x\n", trStat->flags);
@@ -315,12 +314,12 @@ static void dumpReadCharacteristicMesg(const DirconMesg *pMesg, int mesgLen, Mes
                     fmtBufAppend(fmtBuf, "%c", mesg->data[i]);
                 }
             }
-        } else if (uuid16Eq(&uuid16, &supportedResistanceLevelRangeUUID)) {
+        } else if (uuid16 == supportedResistanceLevelRange) {
             const ResistLevelRange *rlr = (ResistLevelRange *) mesg->data;
             fmtBufAppend(fmtBuf, "minimum: %u\n", rlr->minResLevel);
             fmtBufAppend(fmtBuf, "maximum: %u\n", rlr->maxResLevel);
             fmtBufAppend(fmtBuf, "minIncr: %u\n", rlr->incResLevel);
-        } else if (uuid16Eq(&uuid16, &supportedPowerRangeUUID)) {
+        } else if (uuid16 == supportedPowerRange) {
             const PowerRange *spr = (PowerRange *) mesg->data;
             fmtBufAppend(fmtBuf, "minimum: %d [W]\n", getSINT16(spr->minPower));
             fmtBufAppend(fmtBuf, "maximum: %d [W]\n", getSINT16(spr->maxPower));
@@ -338,11 +337,10 @@ static void dumpWriteCharacteristicMesg(const DirconMesg *pMesg, int mesgLen, Me
     fmtBufAppend(fmtBuf, "charUUID: %s (%s)\n", fmtUuid128(&mesg->charUuid), fmtUuid128Name(&mesg->charUuid));
 
     if (mesgType == request) {
-        Uuid16 uuid16;
+        uint16_t uuid16 = uuid128ToUint16(&mesg->charUuid);
         size_t dataLen = (mesgLen - sizeof (Uuid128));
 
-        getUuid16(&uuid16, &mesg->charUuid);
-        if (uuid16Eq(&uuid16, &fitnessMachineControlPointUUID)) {
+        if (uuid16 == fitnessMachineControlPoint) {
             const FitMachCP *fmcp = (FitMachCP *) mesg->data;
             fmtBufAppend(fmtBuf, "%s", fmtFitMachCP(fmcp, dataLen));
         } else {
@@ -361,12 +359,11 @@ static void dumpEnableCharacteristicNotificationsMesg(const DirconMesg *pMesg, i
 static void dumpUnsolicitedCharacteristicNotificationMesg(const DirconMesg *pMesg, int mesgLen, MesgType mesgType)
 {
     const UnsCharNot *mesg = (UnsCharNot *) pMesg;
-    Uuid16 uuid16;
+    uint16_t uuid16 = uuid128ToUint16(&mesg->charUuid);
     size_t dataLen = (mesgLen - sizeof (Uuid128));
 
     fmtBufAppend(fmtBuf, "charUUID: %s (%s)\n", fmtUuid128(&mesg->charUuid), fmtUuid128Name(&mesg->charUuid));
-    getUuid16(&uuid16, &mesg->charUuid);
-    if (uuid16Eq(&uuid16, &indoorBikeDataUUID)) {
+    if (uuid16 == indoorBikeData) {
         // Indoor Bike Data
         const IndoorBikeData *ibd = (IndoorBikeData *) mesg->data;
         fmtBufAppend(fmtBuf, "%s", fmtIndoorBikeData(ibd, dataLen));

@@ -235,8 +235,42 @@ Service *serverFindService(const Server *server, const Uuid128 *uuid)
 
 static int serverCreateFitnessMachineService(Server *server)
 {
-    if (serverAddService(server, &fitnessMachineServiceUUID) == NULL) {
+    Uuid128 uuid128;
+    Service *ftms;
+
+    uint16ToUuid128(&uuid128, fitnessMachineService);
+    if ((ftms = serverAddService(server, &uuid128)) == NULL) {
         mlog(error, "Failed to create FTMS service!");
+        return -1;
+    }
+
+    uint16ToUuid128(&uuid128, fitnessMachineFeature);
+    if (svcAddChar(ftms, &uuid128, DIRCON_CHAR_PROP_READ) == NULL) {
+        mlog(error, "Failed to create Fitness Machine Feature characteristic!");
+        return -1;
+    }
+
+    uint16ToUuid128(&uuid128, indoorBikeData);
+    if (svcAddChar(ftms, &uuid128, DIRCON_CHAR_PROP_NOTIFY) == NULL) {
+        mlog(error, "Failed to create Indoor Bike Data characteristic!");
+        return -1;
+    }
+
+    uint16ToUuid128(&uuid128, supportedPowerRange);
+    if (svcAddChar(ftms, &uuid128, DIRCON_CHAR_PROP_READ) == NULL) {
+        mlog(error, "Failed to create Supported Power Range characteristic!");
+        return -1;
+    }
+
+    uint16ToUuid128(&uuid128, fitnessMachineControlPoint);
+    if (svcAddChar(ftms, &uuid128, DIRCON_CHAR_PROP_WRITE | DIRCON_CHAR_PROP_NOTIFY) == NULL) {
+        mlog(error, "Failed to create Fitness Machine Control Point characteristic!");
+        return -1;
+    }
+
+    uint16ToUuid128(&uuid128, fitnessMachineStatus);
+    if (svcAddChar(ftms, &uuid128, DIRCON_CHAR_PROP_NOTIFY) == NULL) {
+        mlog(error, "Failed to create Fitness Machine Status characteristic!");
         return -1;
     }
 

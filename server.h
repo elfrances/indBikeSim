@@ -112,6 +112,10 @@ typedef struct Server {
     uint16_t heartRate;             // Heart Rate [BPM]
     uint16_t power;                 // Power [Watts]
 
+    uint16_t minPower;
+    uint16_t maxPower;
+    uint16_t incPower;
+
     int dissectMesgId;
 
     bool actInProg;                 // activity in progress

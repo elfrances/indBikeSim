@@ -90,6 +90,9 @@ static const char *help =
         "    --power <val>\n"
         "        Specifies a fixed pedal power value (in Watts) to be sent\n"
         "        in the periodic 'Indoor Bike Data' notifications.\n"
+        "    --supported-power-range min,max,inc\n"
+        "        Specifies the minimum, maximum, and increment power values\n"
+        "        (in Watts) used by the Supported Power Range characteristic.\n"
         "    --tcp-port <num>\n"
         "        Specifies the TCP port to use. Default is 36866.\n"
         "    --version\n"
@@ -104,6 +107,12 @@ static int invalidArgument(const char *arg, const char *val)
     return -1;
 }
 
+static int missingArgValue(const char *arg)
+{
+    fprintf(stderr, "Option %s requires a value.\n", arg);
+    return -1;
+}
+
 static int parseArgs(int argc, char **argv, Server *server)
 {
     int n, numArgs;
@@ -111,6 +120,9 @@ static int parseArgs(int argc, char **argv, Server *server)
     // Set defaults
     server->srvAddr.sin_family = 0;
     server->srvAddr.sin_port = htons(DIRCON_TCP_PORT);
+    server->minPower = 0;
+    server->maxPower = 1500;
+    server->incPower = 1;
 
     for (n = 1, numArgs = argc -1; n <= numArgs; n++) {
         const char *arg;
@@ -121,7 +133,9 @@ static int parseArgs(int argc, char **argv, Server *server)
         if (strcmp(arg, "--activity") == 0) {
 #ifdef CONFIG_FIT_ACTIVITY_FILE
             FILE *fp;
-            val = argv[++n];
+            if ((val = argv[++n]) == NULL) {
+                return missingArgValue(arg);
+            }
             if ((fp = fopen(val, "r")) == NULL) {
                 return invalidArgument(arg, val);
             }
@@ -131,14 +145,18 @@ static int parseArgs(int argc, char **argv, Server *server)
 #endif
         } else if (strcmp(arg, "--cadence") == 0) {
             uint16_t cadence;
-            val = argv[++n];
+            if ((val = argv[++n]) == NULL) {
+                return missingArgValue(arg);
+            }
             if (sscanf(val, "%hu", &cadence) != 1) {
                 return invalidArgument(arg, val);
             }
             server->cadence = cadence;
         } else if (strcmp(arg, "--dissect") == 0) {
             int dissectMesgId;
-            val = argv[++n];
+            if ((val = argv[++n]) == NULL) {
+                return missingArgValue(arg);
+            }
             if ((sscanf(val, "%d", &dissectMesgId) != 1) ||
                 (dissectMesgId < 0) ||
                 (dissectMesgId > UnsolicitedCharacteristicNotification)) {
@@ -148,7 +166,9 @@ static int parseArgs(int argc, char **argv, Server *server)
             server->dissect = true;
         } else if (strcmp(arg, "--heart-rate") == 0) {
             uint16_t heartRate;
-            val = argv[++n];
+            if ((val = argv[++n]) == NULL) {
+                return missingArgValue(arg);
+            }
             if (sscanf(val, "%hu", &heartRate) != 1) {
                 return invalidArgument(arg, val);
             }
@@ -159,13 +179,17 @@ static int parseArgs(int argc, char **argv, Server *server)
         } else if (strcmp(arg, "--hex-dump") == 0) {
             server->hexDumpMesg = true;
         } else if (strcmp(arg, "--ip-address") == 0) {
-            val = argv[++n];
+            if ((val = argv[++n]) == NULL) {
+                return missingArgValue(arg);
+            }
             if (inet_pton(AF_INET, val, &server->srvAddr.sin_addr) != 1) {
                 return invalidArgument(arg, val);
             }
 #ifdef CONFIG_MSGLOG
         } else if (strcmp(arg, "--log-dest") == 0) {
-            val = argv[++n];
+            if ((val = argv[++n]) == NULL) {
+                return missingArgValue(arg);
+            }
             LogDest dest;
             if (strcmp(val, "both") == 0) {
                 dest = both;
@@ -178,7 +202,9 @@ static int parseArgs(int argc, char **argv, Server *server)
             }
             msgLogSetDest(dest);
         } else if (strcmp(arg, "--log-level") == 0) {
-            val = argv[++n];
+            if ((val = argv[++n]) == NULL) {
+                return missingArgValue(arg);
+            }
             LogLevel level;
             if (strcmp(val, "none") == 0) {
                 level = none;
@@ -197,14 +223,29 @@ static int parseArgs(int argc, char **argv, Server *server)
             server->noMdns = true;
         } else if (strcmp(arg, "--power") == 0) {
             uint16_t power;
-            val = argv[++n];
+            if ((val = argv[++n]) == NULL) {
+                return missingArgValue(arg);
+            }
             if (sscanf(val, "%hu", &power) != 1) {
                 return invalidArgument(arg, val);
             }
             server->power = power;
+        } else if (strcmp(arg, "--supported-power-range") == 0) {
+            uint16_t minPwr, maxPwr, incPwr;
+            if ((val = argv[++n]) == NULL) {
+                return missingArgValue(arg);
+            }
+            if (sscanf(val, "%hu,%hu,%hu", &minPwr, &maxPwr, &incPwr) != 3) {
+                return invalidArgument(arg, val);
+            }
+            server->minPower = minPwr;
+            server->maxPower = maxPwr;
+            server->incPower = incPwr;
         } else if (strcmp(arg, "--tcp-port") == 0) {
             uint16_t tcpPort;
-            val = argv[++n];
+            if ((val = argv[++n]) == NULL) {
+                return missingArgValue(arg);
+            }
             if ((sscanf(val, "%hu", &tcpPort) != 1) ||
                 (tcpPort < 1024) ||
                 (tcpPort > 49151)) {
