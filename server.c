@@ -64,7 +64,7 @@ static void fitRecToTrkPt(const FIT_RECORD_MESG *record, TrkPt *tp)
     }
 
     if (record->cadence != FIT_UINT8_INVALID) {
-        tp->cadence = record->cadence * 2;
+        tp->cadence = record->cadence;
     }
 
     if (record->heart_rate != FIT_UINT8_INVALID) {
@@ -629,6 +629,10 @@ int serverProcConnDrop(Server *server)
     // Clean up
     server->indBikeState = stopped;
     server->controlGranted = false;
+#ifdef CONFIG_CPS
+    server->cumulativeCrankRevolutions = 0;
+    server->lastCrankEventTime = 0;
+#endif
     sess->cpmNotificationsEnabled = false;
     sess->ibdNotificationsEnabled = false;
     sess->rxMesgCnt = 0;

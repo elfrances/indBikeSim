@@ -201,22 +201,21 @@ int dirconSendReadCharacteristicMesg(Server *server, DirconSession *sess, const 
 static uint16_t initCpmData(Server *server, CycPowerMeas *cpm)
 {
     uint16_t flags = CPM_PEDAL_POWER_BALANCE | CPM_PEDAL_POWER_BALANCE_REFERENCE | CPM_CRANK_REVOLUTION_DATA;
-    const uint16_t ticksPerRevolution = (60 * 1024) / server->cadence;
-    static uint16_t cumulativeCrankRevolutions = 0;
-    static uint16_t lastCrankEventTime = 0;
 
-    // Increment the cumulative crank revolutions
-    // value by one, and the last crank event time
-    // by the number of ticks required to complete
-    // a crank revolution at the current cadence.
-    cumulativeCrankRevolutions += 1;
-    lastCrankEventTime += ticksPerRevolution;
+    // Increment the cumulativeCrankRevolutions value
+    // based on the current cadence.
+    server->cumulativeCrankRevolutions += server->cadence;
+
+    // The CPM notification is sent once per second
+    // so increment the lastCrankEventTime value by
+    // one second worth of ticks.
+    server->lastCrankEventTime += (60 * 1024);
 
     putUINT16(cpm->flags, flags);
     putUINT16(cpm->instPower, server->power);   // power
     putUINT8(&cpm->data[0], 0x64);  // balance = 50/50, reference = left pedal
-    putUINT16(&cpm->data[1], cumulativeCrankRevolutions);
-    putUINT16(&cpm->data[3], lastCrankEventTime);
+    putUINT16(&cpm->data[1], server->cumulativeCrankRevolutions);
+    putUINT16(&cpm->data[3], server->lastCrankEventTime);
 
     return (sizeof (CycPowerMeas) + 5);
 }
@@ -498,6 +497,10 @@ static int dirconProcWriteCharacteristicMesg(Server *server, DirconSession *sess
         } else if (fmcp->opCode == FMCP_RESET) {
             server->controlGranted = false;
             server->indBikeState = stopped;
+#ifdef CONFIG_CPS
+            server->cumulativeCrankRevolutions = 0;
+            server->lastCrankEventTime = 0;
+#endif
         } else if (fmcp->opCode == FMCP_SET_TGT_POWER) {
             // TBD
         } else if (fmcp->opCode == FMCP_START_OR_RESUME) {

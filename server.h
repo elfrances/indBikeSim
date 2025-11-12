@@ -115,6 +115,11 @@ typedef struct Server {
     uint16_t power;                 // Power [Watts]
     double speed;                   // Speed [m/s]
 
+#ifdef CONFIG_CPS
+    uint16_t cumulativeCrankRevolutions;
+    uint16_t lastCrankEventTime;
+#endif
+
     uint16_t minPower;
     uint16_t maxPower;
     uint16_t incPower;
