@@ -32,7 +32,8 @@
 // to generate the cadence, heart rate, and power values.
 #define CONFIG_FIT_ACTIVITY_FILE
 
-// mDNS Agent: allows the app to advertise and discover services via mDNS
+// mDNS Agent: allows the app to advertise the WFTNP service via its
+// own mDNS Agent, instead of using the native Avahi Daemon.
 #undef CONFIG_MDNS_AGENT
 
 // MsgLog: enables the trace message logging facility

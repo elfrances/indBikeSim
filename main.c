@@ -84,9 +84,11 @@ static const char *help =
         "    --log-level {none|info|trace|debug}\n"
         "        Set the specified message log level. The default level is\n"
         "        \"info\".\n"
+#ifdef CONFIG_MDNS_AGENT
         "    --no-mdns\n"
         "        Don't use mDNS to advertise the WFTNP service on the local\n"
         "        network.\n"
+#endif
         "    --power <val>\n"
         "        Specifies a fixed pedal power value (in Watts) to be sent\n"
         "        in the periodic 'Indoor Bike Data' notifications.\n"
@@ -96,7 +98,7 @@ static const char *help =
         "    --supported-power-range <min,max,inc>\n"
         "        Specifies the minimum, maximum, and increment power values\n"
         "        (in Watts) used by the Supported Power Range characteristic.\n"
-        "        Default is 0,1500,1."
+        "        Default is 0,1500,1.\n"
         "    --tcp-port <num>\n"
         "        Specifies the TCP port to use. Default is 36866.\n"
         "    --version\n"
@@ -223,8 +225,10 @@ static int parseArgs(int argc, char **argv, Server *server)
             }
             msgLogSetLevel(level);
 #endif
+#ifdef CONFIG_MDNS_AGENT
         } else if (strcmp(arg, "--no-mdns") == 0) {
             server->noMdns = true;
+#endif
         } else if (strcmp(arg, "--power") == 0) {
             uint16_t power;
             if ((val = argv[++n]) == NULL) {
