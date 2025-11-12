@@ -3,7 +3,7 @@
 indBikeSim is an app that simulates a basic FTMS Indoor Bike device. It supports the following features:
 
 * Uses Direct Connect (DIRCON) as the communication protocol with the virtual cycling app.
-* Uses the Avahi Daemon to advertise the wahoo-fitness-tnpWFTNP service on the local network.
+* Uses the Avahi Daemon to advertise the wahoo-fitness-tnp (WFTNP) service on the local network.
 * The FTMS Indoor Bike Data notifications include cadence, heart rate, power, and speed.
 * The cadence, heart rate, power, and speed values can be specified via command-line arguments or obtained from the trackpoints in a FIT file.
 * Has the option to include a Cycling Power Service (CPS) for reporting power and cadence.
@@ -146,3 +146,11 @@ The screenshots below show the FulGaz, RealVelo, and Zwift virtual cycling apps 
 ![RealVelo app](./assets/RealVelo.png)
 
 ![Zwift app](./assets/Zwift.png)
+
+# References
+
+[Bluetooth SIG Fitness Machine Service Specification](https://www.bluetooth.com/specifications/specs/html/?src=ftms-v1-0-1_1756429637/FTMS_v1.0.1/out/en/index-en.html)
+
+[Bluetooth SIG Cycling Power Service Specification](https://www.bluetooth.com/specifications/specs/html/?src=CPS_v1.1/out/en/index-en.html)
+
+[Bluetooth SIG GATT Specification Supplement](https://btprodspecificationrefs.blob.core.windows.net/gatt-specification-supplement/GATT_Specification_Supplement.pdf)
