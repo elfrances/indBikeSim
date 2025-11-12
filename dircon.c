@@ -25,6 +25,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "cps.h"
 #include "dircon.h"
 #include "dump.h"
 #include "ftms.h"
@@ -195,29 +196,40 @@ int dirconSendReadCharacteristicMesg(Server *server, DirconSession *sess, const 
     return dirconSendMesg(server, sess, request, (DirconMesg *) readChar);
 }
 
-static uint16_t initIndoorBikeDataChar(Server *server, IndoorBikeData *ibd)
+#ifdef CONFIG_CPS
+static uint16_t initCpmData(Server *server, CycPowerMeas *cpm)
 {
-    uint16_t flags = IBD_INSTANTANEOUS_CADENCE | IBD_INSTANTANEOUS_POWER | IBD_HEART_RATE;
-    uint16_t speed = server->speed;
-    uint16_t cadence = server->cadence;
-    uint16_t power = server->power;
-    uint8_t heartRate = server->heartRate;
-#ifdef CONFIG_FIT_ACTIVITY_FILE
-    TrkPt *tp = TAILQ_FIRST(&server->trkPtList);
+    uint16_t flags = CPM_PEDAL_POWER_BALANCE | CPM_PEDAL_POWER_BALANCE_REFERENCE | CPM_CRANK_REVOLUTION_DATA;
+    const uint16_t ticksPerRevolution = (60 * 1024) / server->cadence;
+    static uint16_t cumulativeCrankRevolutions = 0;
+    static uint16_t lastCrankEventTime = 0;
 
-    if ((tp != NULL) && server->actInProg) {
-        speed = tp->speed;
-        cadence = tp->cadence;
-        power = tp->power;
-        heartRate = tp->heartRate;
-    }
+    // Increment the cumulative crank revolutions
+    // value by one, and the last crank event time
+    // by the number of ticks required to complete
+    // a crank revolution at the current cadence.
+    cumulativeCrankRevolutions += 1;
+    lastCrankEventTime += ticksPerRevolution;
+
+    putUINT16(cpm->flags, flags);
+    putUINT16(cpm->instPower, server->power);   // power
+    putUINT8(&cpm->data[0], 0x64);  // balance = 50/50, reference = left pedal
+    putUINT16(&cpm->data[1], cumulativeCrankRevolutions);
+    putUINT16(&cpm->data[3], lastCrankEventTime);
+
+    return (sizeof (CycPowerMeas) + 5);
+}
 #endif
 
-    putUINT16(ibd->flags,flags);
-    putUINT16(&ibd->data[0], speed);    // speed
-    putUINT16(&ibd->data[2], cadence);  // cadence
-    putUINT16(&ibd->data[4], power);    // power
-    putUINT8(&ibd->data[6], heartRate); // HR
+static uint16_t initIbdData(Server *server, IndoorBikeData *ibd)
+{
+    uint16_t flags = IBD_INSTANTANEOUS_CADENCE | IBD_INSTANTANEOUS_POWER | IBD_HEART_RATE;
+
+    putUINT16(ibd->flags, flags);
+    putUINT16(&ibd->data[0], server->speed * 3.6 * 100);    // speed [km/h] X 100
+    putUINT16(&ibd->data[2], server->cadence * 2);          // cadence [RPM] X 2
+    putUINT16(&ibd->data[4], server->power);                // power [W]
+    putUINT8(&ibd->data[6], server->heartRate);             // HR [BPM]
 
     return (sizeof (IndoorBikeData) + 7);
 }
@@ -229,10 +241,17 @@ static int dirconSendUnsolicitedCharacteristicNotificationMesg(Server *server, D
     uint16ToUuid128(&unsCharNot->charUuid, charUuid);
     unsCharNot->hdr.mesgLen = sizeof (unsCharNot->charUuid);
 
+#ifdef CONFIG_CPS
+    if (charUuid == cyclingPowerMeasurement) {
+        // Cycling Power Measurement
+        CycPowerMeas *cpm = (CycPowerMeas *) unsCharNot->data;
+        unsCharNot->hdr.mesgLen += initCpmData(server, cpm);
+    } else
+#endif
     if (charUuid == indoorBikeData) {
         // Indoor Bike Data
         IndoorBikeData *ibd = (IndoorBikeData *) unsCharNot->data;
-        unsCharNot->hdr.mesgLen += initIndoorBikeDataChar(server, ibd);
+        unsCharNot->hdr.mesgLen += initIbdData(server, ibd);
     } else {
         // Hu?
         return -1;
@@ -245,25 +264,41 @@ int dirconProcTimers(Server *server, const struct timeval *time)
 {
     DirconSession *sess = &server->dirconSession;
 
-    if ((sess->nextNotification.tv_sec != 0) &&
-        (tvCmp(time, &sess->nextNotification) >= 0)) {
-        if (sess->ibdNotificationsEnabled) {
-            // Send an Indoor Bike Data notification
-            dirconSendUnsolicitedCharacteristicNotificationMesg(server, sess, indoorBikeData);
-        }
-
+    if ((sess->nextNotification.tv_sec != 0) && (tvCmp(time, &sess->nextNotification) >= 0)) {
+        if (sess->cpmNotificationsEnabled || sess->ibdNotificationsEnabled) {
+            // Time to send out all applicable notifications
 #ifdef CONFIG_FIT_ACTIVITY_FILE
-        {
-            TrkPt *tp = TAILQ_FIRST(&server->trkPtList);
+            {
+                TrkPt *tp = TAILQ_FIRST(&server->trkPtList);
 
-            if ((tp != NULL) && server->actInProg) {
-                // Remove this trackpoint and move on to
-                // the next one...
-                TAILQ_REMOVE(&server->trkPtList, tp, tqEntry);
-                trkPtFree(tp);
+                if ((tp != NULL) && server->actInProg) {
+                    // Override the static metrics with the values
+                    // from the current trackpoint.
+                    server->cadence = tp->cadence;
+                    server->heartRate = tp->heartRate;
+                    server->power = tp->power;
+                    server->speed = tp->speed;
+
+                    // Remove this trackpoint and move on to
+                    // the next one...
+                    TAILQ_REMOVE(&server->trkPtList, tp, tqEntry);
+                    trkPtFree(tp);
+                }
+            }
+#endif
+
+#ifdef CONFIG_CPS
+            if (sess->cpmNotificationsEnabled) {
+                // Send Cycling Power Measurement notification
+                dirconSendUnsolicitedCharacteristicNotificationMesg(server, sess, cyclingPowerMeasurement);
+            }
+#endif
+
+            if (sess->ibdNotificationsEnabled) {
+                // Send an Indoor Bike Data notification
+                dirconSendUnsolicitedCharacteristicNotificationMesg(server, sess, indoorBikeData);
             }
         }
-#endif
 
         // Re-arm the timer with a 1-sec expiry
         sess->nextNotification.tv_sec++;
@@ -367,6 +402,20 @@ static int dirconProcReadCharacteristicMesg(Server *server, DirconSession *sess,
     ReadCharMesg *resp = (ReadCharMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
     resp->charUuid = readChar->charUuid;
     resp->hdr.mesgLen = sizeof (resp->charUuid);
+
+#ifdef CONFIG_CPS
+    if (chr->uuid16 == sensorLocation) {
+        // Sensor Location (GATT Spec Supp 3.209)
+        resp->data[0] = 13; // Rear Hub
+        resp->hdr.mesgLen += 1;
+    } else if (chr->uuid16 == cyclingPowerFeature) {
+        // Cycling Power Features (CPS 3.1)
+        CycPowerFeat *cpf = (CycPowerFeat *) resp->data;
+        uint32_t cpFeat = CPF_PEDAL_POWER_BALANCE | CPF_CRANK_REVOLUTION_DATA;
+        putUINT32(cpf->flags, cpFeat);
+        resp->hdr.mesgLen += sizeof (CycPowerFeat);
+    } else
+#endif
 
     if (chr->uuid16 == fitnessMachineFeature) {
         // Fitness Machine Features (FTMS 4.3.1.1)
@@ -485,18 +534,15 @@ static int dirconProcEnableCharacteristicNotificationsMesg(Server *server, Dirco
     resp->enable = enCharNot->enable;
     resp->hdr.mesgLen = sizeof (resp->charUuid);
 
+#ifdef CONFIG_CPS
+    if (chr->uuid16 == cyclingPowerMeasurement) {
+        // Cycling Power Measurement
+        sess->cpmNotificationsEnabled = enable;
+    } else
+#endif
+
     if (chr->uuid16 == indoorBikeData) {
         // Indoor Bike Data
-        if (enable) {
-            if (sess->nextNotification.tv_sec == 0) {
-                // Start the notification timer with a 1-sec expiry
-                sess->nextNotification = now;
-                sess->nextNotification.tv_sec++;
-            }
-        } else {
-            sess->nextNotification.tv_sec = 0;
-            sess->nextNotification.tv_usec = 0;
-        }
         sess->ibdNotificationsEnabled = enable;
     } else if (chr->uuid16 == fitnessMachineControlPoint) {
         // Fitness Machine Control Point

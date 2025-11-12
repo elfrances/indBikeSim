@@ -39,6 +39,7 @@ typedef struct DirconSession {
     uint32_t txMesgCnt;
     uint8_t lastTxReqSeqNum;
     uint8_t lastRxReqSeqNum;
+    bool cpmNotificationsEnabled;           // Cycling Power Measurement notifications enabled
     bool fmcpNotificationsEnabled;          // Fitness Machine Control Point notifications enabled
     bool ibdNotificationsEnabled;           // Indoor Bike Data notifications enabled
     bool respPend;                          // server-initiated DIRCON transaction in progress
@@ -118,10 +119,10 @@ typedef struct Server {
     uint32_t rxMdnsMesgCnt;
     uint32_t txMdnsMesgCnt;
 
-    uint16_t cadence;               // Cadence [RPM] X2
+    uint16_t cadence;               // Cadence [RPM]
     uint16_t heartRate;             // Heart Rate [BPM]
     uint16_t power;                 // Power [Watts]
-    uint16_t speed;                 // Speed [km/h] X100
+    double speed;                   // Speed [m/s]
 
     uint16_t minPower;
     uint16_t maxPower;

@@ -76,9 +76,9 @@ static void fitRecToTrkPt(const FIT_RECORD_MESG *record, TrkPt *tp)
     }
 
     if (record->enhanced_speed != FIT_UINT32_INVALID) {
-        tp->speed = (((double) record->enhanced_speed / 1000.0) / 3.6) * 100;  // FTMS speed unit is 0.01 km/h
+        tp->speed = (double) record->enhanced_speed / 1000.0;
     } else if (record->speed != FIT_UINT16_INVALID) {
-        tp->speed = (((double) record->speed / 1000.0) / 3.6) * 100;   // FTMS speed unit is 0.01 km/h
+        tp->speed = (double) record->speed / 1000.0;
     }
 
     //mlog(info, "timestamp=%ld cadence=%u heartRate=%u power=%u",
@@ -254,6 +254,41 @@ Characteristic *serverFindCharacteristicByUuid128(const Server *server, const Uu
 
     return NULL;
 }
+
+
+#ifdef CONFIG_CPS
+static int serverCreateCyclingPowerService(Server *server)
+{
+    Uuid128 uuid128;
+    Service *ftms;
+
+    uint16ToUuid128(&uuid128, cyclingPowerService);
+    if ((ftms = serverAddService(server, &uuid128)) == NULL) {
+        mlog(error, "Failed to create FTMS!");
+        return -1;
+    }
+
+    uint16ToUuid128(&uuid128, cyclingPowerMeasurement);
+    if (svcAddChar(ftms, &uuid128, DIRCON_CHAR_PROP_NOTIFY) == NULL) {
+        mlog(error, "Failed to create Cycling Power Measurement characteristic!");
+        return -1;
+    }
+
+    uint16ToUuid128(&uuid128, cyclingPowerFeature);
+    if (svcAddChar(ftms, &uuid128, DIRCON_CHAR_PROP_READ) == NULL) {
+        mlog(error, "Failed to create Cycling Power Feature characteristic!");
+        return -1;
+    }
+
+    uint16ToUuid128(&uuid128, sensorLocation);
+    if (svcAddChar(ftms, &uuid128, DIRCON_CHAR_PROP_READ) == NULL) {
+        mlog(error, "Failed to create Sensor Location characteristic!");
+        return -1;
+    }
+
+    return 0;
+}
+#endif
 
 static int serverCreateFitnessMachineService(Server *server)
 {
@@ -470,6 +505,18 @@ int serverInit(Server *server)
     TAILQ_INIT(&server->svcList);
 
     server->dirconSession.lastTxReqSeqNum = 0xff;
+
+    // Start the notification timer with a 1-sec expiry
+    server->dirconSession.nextNotification = server->baseTime;
+    server->dirconSession.nextNotification.tv_sec++;
+
+#ifdef CONFIG_CPS
+    // Create the CPS instance
+    if (serverCreateCyclingPowerService(server) != 0) {
+        mlog(error, "Failed to create CPS!");
+        return -1;
+    }
+#endif
 
     // Create the FTMS instance
     if (serverCreateFitnessMachineService(server) != 0) {

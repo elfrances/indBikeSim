@@ -155,7 +155,7 @@ static int parseArgs(int argc, char **argv, Server *server)
             if (sscanf(val, "%hu", &cadence) != 1) {
                 return invalidArgument(arg, val);
             }
-            server->cadence = cadence * 2;  // FTMS cadence unit is 0.5 RPM
+            server->cadence = cadence;
         } else if (strcmp(arg, "--dissect") == 0) {
             int dissectMesgId;
             if ((val = argv[++n]) == NULL) {
@@ -242,7 +242,7 @@ static int parseArgs(int argc, char **argv, Server *server)
             if (sscanf(val, "%hu", &speed) != 1) {
                 return invalidArgument(arg, val);
             }
-            server->speed = speed * 100;    // FTMS speed unit is 0.01 km/h
+            server->speed = (double) speed / 3.6; // convert km/h to m/s
         } else if (strcmp(arg, "--supported-power-range") == 0) {
             uint16_t minPwr, maxPwr, incPwr;
             if ((val = argv[++n]) == NULL) {

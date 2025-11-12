@@ -25,6 +25,9 @@
 // Command Line Interface: adds an interactive CLI helpful for debugging
 #undef CONFIG_CLI
 
+// Cycling Power Service: adds support for CPS in addition to FTMS
+#define CONFIG_CPS
+
 // FIT activity file: allows the app to use the metrics from a FIT file
 // to generate the cadence, heart rate, and power values.
 #define CONFIG_FIT_ACTIVITY_FILE
