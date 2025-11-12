@@ -31,7 +31,7 @@ sed -i s"/SN/123456789/" wahoo-fitness-tnp.service
 sed -i s"/MAC/`cat /sys/class/net/enp2s0/address`/" wahoo-fitness-tnp.service
 ```
 
-NOTE: If you have enabled the optional CPS feature, make sure to add the CPS's UUID 0x1818 to the comma-separated list in the ble-service-uuids TXT record: 
+**NOTE:** If you have enabled the optional CPS feature, make sure to add the CPS's UUID 0x1818 to the comma-separated list in the ble-service-uuids TXT record: 
 
 ```
 <txt-record>ble-service-uuids=0x1826,0x1818</txt-record>
@@ -138,3 +138,11 @@ OPTIONS:
 BUGS:
     Report bugs and enhancement requests to: marcelo_mourier@yahoo.com
 ```
+
+The screenshots below show the FulGaz, RealVelo, and Zwift virtual cycling apps using indBikeSim as the resistance, power, cadence, and heart rate devices:
+
+![FulGaz app](./assets/FulGaz.png)
+
+![RealVelo app](./assets/RealVelo.png)
+
+![Zwift app](./assets/Zwift.png)
