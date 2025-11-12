@@ -349,6 +349,19 @@ const char *fmtSockaddr(const struct sockaddr_in *sockAddr, bool printPort)
     return fmtBuf;
 }
 
+const char *fmtIndBikeState(IndBikeState indBikeState)
+{
+    if (indBikeState == stopped) {
+        return "stopped";
+    } else if (indBikeState == started) {
+        return "started";
+    } else if (indBikeState == paused) {
+        return "paused";
+    }
+
+    return "???";
+}
+
 #ifdef __DARWIN__
 static int getIntfMacAddr(Server *server, const char *intfName)
 {
@@ -507,8 +520,8 @@ int serverInit(Server *server)
     server->dirconSession.lastTxReqSeqNum = 0xff;
 
     // Start the notification timer with a 1-sec expiry
-    server->dirconSession.nextNotification = server->baseTime;
-    server->dirconSession.nextNotification.tv_sec++;
+    server->dirconSession.nextClkTick = server->baseTime;
+    server->dirconSession.nextClkTick.tv_sec++;
 
 #ifdef CONFIG_CPS
     // Create the CPS instance
@@ -613,11 +626,10 @@ int serverProcConnDrop(Server *server)
 
     mlog(info, "Client app disconnected!");
 
-    // Dis-arm the DIRCON timers
-    sess->nextNotification.tv_sec = 0;
-
     // Clean up
+    server->indBikeState = stopped;
     server->controlGranted = false;
+    sess->cpmNotificationsEnabled = false;
     sess->ibdNotificationsEnabled = false;
     sess->rxMesgCnt = 0;
     sess->txMesgCnt = 0;

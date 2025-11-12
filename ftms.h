@@ -208,6 +208,10 @@ typedef struct FitMachCP FitMachCP;
 #define FMCP_SET_SPIN_DOWN_CONTROL      0x13U
 #define FMCP_SET_TGT_CADENCE            0x14U   // parm: UINT16 (rpm)
 
+// STOP_OR_PAUSE parameter
+#define FMCP_STOP   0x01
+#define FMCP_PAUSE  0x02
+
 #define FMCP_RESPONSE_CODE  0x80U
 
 // Fitness Machine Control Point Procedure Complete (FTMS 4.16.2.22)

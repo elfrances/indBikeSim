@@ -145,8 +145,9 @@ static int dirconSendMesg(Server *server, DirconSession *sess, MesgType mesgType
         return -1;
     }
 
-    if (mesgType == request)
+    if ((mesgType == request) && (mesg->mesgId != UnsolicitedCharacteristicNotification)) {
         sess->respPend = true;
+    }
 
     return 0;
 }
@@ -264,14 +265,14 @@ int dirconProcTimers(Server *server, const struct timeval *time)
 {
     DirconSession *sess = &server->dirconSession;
 
-    if ((sess->nextNotification.tv_sec != 0) && (tvCmp(time, &sess->nextNotification) >= 0)) {
+    if ((sess->nextClkTick.tv_sec != 0) && (tvCmp(time, &sess->nextClkTick) >= 0)) {
+        // Send out all applicable notifications
         if (sess->cpmNotificationsEnabled || sess->ibdNotificationsEnabled) {
-            // Time to send out all applicable notifications
 #ifdef CONFIG_FIT_ACTIVITY_FILE
             {
                 TrkPt *tp = TAILQ_FIRST(&server->trkPtList);
 
-                if ((tp != NULL) && server->actInProg) {
+                if (tp != NULL) {
                     // Override the static metrics with the values
                     // from the current trackpoint.
                     server->cadence = tp->cadence;
@@ -279,10 +280,12 @@ int dirconProcTimers(Server *server, const struct timeval *time)
                     server->power = tp->power;
                     server->speed = tp->speed;
 
-                    // Remove this trackpoint and move on to
-                    // the next one...
-                    TAILQ_REMOVE(&server->trkPtList, tp, tqEntry);
-                    trkPtFree(tp);
+                    // If the activity is in-progress, remove this
+                    // trackpoint and move on to the next one...
+                    if (server->actInProg) {
+                        TAILQ_REMOVE(&server->trkPtList, tp, tqEntry);
+                        trkPtFree(tp);
+                    }
                 }
             }
 #endif
@@ -300,8 +303,19 @@ int dirconProcTimers(Server *server, const struct timeval *time)
             }
         }
 
+        if ((server->indBikeState == started) && (sess->lastSetIndBikeSimParms.tv_sec != 0)) {
+            // If we haven't heard from the client app in the
+            // last 60 seconds, assume the activity has stopped...
+            if ((time->tv_sec - sess->lastSetIndBikeSimParms.tv_sec) > 60) {
+                server->indBikeState = stopped;
+                sess->lastSetIndBikeSimParms.tv_sec = 0;
+                sess->lastSetIndBikeSimParms.tv_usec = 0;
+                mlog(info, "Idle timeout: activity stopped.");
+            }
+        }
+
         // Re-arm the timer with a 1-sec expiry
-        sess->nextNotification.tv_sec++;
+        sess->nextClkTick.tv_sec++;
     }
 
     return 0;
@@ -473,26 +487,71 @@ static int dirconProcWriteCharacteristicMesg(Server *server, DirconSession *sess
 
     if (chr->uuid16 == fitnessMachineControlPoint) {
         // Fitness Machine Control Point
+        IndBikeState currIndBikeState = server->indBikeState;
         const FitMachCP *fmcp = (FitMachCP *) writeChar->data;
         int resultCode = FMCP_RC_SUCCESS;
+
         if ((fmcp->opCode != FMCP_REQUEST_CONTROL) && !server->controlGranted) {
             resultCode = FMCP_RC_CONTROL_NOT_PERMITTED;
         } else if (fmcp->opCode == FMCP_REQUEST_CONTROL) {
             server->controlGranted = true;
         } else if (fmcp->opCode == FMCP_RESET) {
             server->controlGranted = false;
+            server->indBikeState = stopped;
         } else if (fmcp->opCode == FMCP_SET_TGT_POWER) {
             // TBD
         } else if (fmcp->opCode == FMCP_START_OR_RESUME) {
-            // TBD
+            // Update indoor bike state
+            if ((server->indBikeState == stopped) || (server->indBikeState == paused)) {
+                server->indBikeState = started;
+            }
         } else if (fmcp->opCode == FMCP_STOP_OR_PAUSE) {
-            // TBD
+            uint8_t param = fmcp->parm[0];
+            // Update indoor bike state
+            if (param == FMCP_STOP) {
+                server->indBikeState = stopped;
+            } else if (param == FMCP_PAUSE) {
+                if (server->indBikeState != stopped) {
+                    server->indBikeState = paused;
+                }
+            }
         } else if (fmcp->opCode == FMCP_SET_INDOOR_BIKE_SIM_PARMS) {
-            // TBD
+            const IndBikeSimParms *ibsp = (IndBikeSimParms *) fmcp->parm;
+            mlog(trace, "SET_INDOOR_BIKE_SIM_PARMS: windSpeed: %.3lf [mps], gradient: %.3lf [%%], crr: %.5lf, cw: %.3lf [kg/m]",
+                    (getUINT16(ibsp->windSpeed) / 1000.0),
+                    (getSINT16(ibsp->grade) / 100.0),
+                    (ibsp->crr / 10000.0),
+                    (ibsp->cw / 100.0));
+            if ((server->indBikeState == started) && !server->actInProg) {
+                // Some virtual cycling apps send a "dummy"
+                // SET_INDOOR_BIKE_SIM_PARMS before the activity
+                // actually starts, simply to put the trainer into
+                // SIM mode, using the default parameters.
+                // To decide if this SET_INDOOR_BIKE_SIM_PARMS is
+                // a "real" one from the actual activity, we check
+                // the time elapsed since the last one we got.
+                struct timeval deltaT;
+                int ms;
+                tvSub(&deltaT, &sess->rxMesgTimestamp, &sess->lastSetIndBikeSimParms);
+                ms = deltaT.tv_sec * 1000 + deltaT.tv_usec / 1000; // milliseconds since the last SET_INDOOR_BIKE_SIM_PARMS
+                if ((ms > 900) && (ms < 1100)) {
+                    mlog(info, "Activity started!");
+                    server->actInProg = true;
+                } else {
+                    mlog(debug, "Dummy SET_INDOOR_BIKE_SIM_PARMS: deltaT=%d [ms]", ms);
+                }
+            }
+
+            // Update the timestamp
+            sess->lastSetIndBikeSimParms = sess->rxMesgTimestamp;
         } else if (fmcp->opCode == FMCP_SET_WHEEL_CIRCUMFERENCE) {
             // TBD
         } else {
             resultCode = FMCP_RC_OP_CODE_NOT_SUPPORTED;
+        }
+
+        if (server->indBikeState != currIndBikeState) {
+            mlog(info, "Indoor bike state change: %s -> %s", fmtIndBikeState(currIndBikeState), fmtIndBikeState(server->indBikeState));
         }
 
         // Schedule the NOTIFICATION that follows the WRITE Response
@@ -581,11 +640,10 @@ int dirconProcMesg(Server *server)
 {
     DirconSession *sess = &server->dirconSession;
     DirconMesg *mesg = (DirconMesg *) server->rxMesgBuf;
-    struct timeval timestamp;
     int n, mesgLen;
     MesgType mesgType;
 
-    gettimeofday(&timestamp, NULL);
+    gettimeofday(&sess->rxMesgTimestamp, NULL);
 
     // Read the message header
     if ((n = recv(sess->cliSockFd, mesg, sizeof (DirconMesg), 0)) != sizeof (DirconMesg)) {
@@ -647,7 +705,7 @@ int dirconProcMesg(Server *server)
     }
 
     if (server->dissect) {
-        dirconDumpMesg(&timestamp, server, sess, RxDir, mesgType, mesg);
+        dirconDumpMesg(&sess->rxMesgTimestamp, server, sess, RxDir, mesgType, mesg);
     }
 
     // We only expect request messages from the virtual cycling

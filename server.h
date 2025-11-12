@@ -30,11 +30,12 @@
 
 // DIRCON Session Info
 typedef struct DirconSession {
-    char peerName[64];                      // name of the DIRCON peer device
     int cliSockFd;                          // file descriptor of the client (connected) DIRCON socket
     struct sockaddr_in locCliAddr;          // local-end of client socket address
     struct sockaddr_in remCliAddr;          // remote-end of client socket address
-    struct timeval nextNotification;        // when next notifications are due
+    struct timeval rxMesgTimestamp;         // timestamp of last DIRCON message received
+    struct timeval nextClkTick;             // when the next clock tick is due
+    struct timeval lastSetIndBikeSimParms;  // last FMCP SET_INDOOR_BIKE_SIM_PARMS command received
     uint32_t rxMesgCnt;
     uint32_t txMesgCnt;
     uint8_t lastTxReqSeqNum;
@@ -45,26 +46,12 @@ typedef struct DirconSession {
     bool respPend;                          // server-initiated DIRCON transaction in progress
 } DirconSession;
 
-// Connection Type
-typedef enum ConnType {
-    dircon = 1,
-    ble = 2,
-} ConnType;
-
-// Selected Characteristic Info
-typedef struct SelChrInfo {
-    ConnType connType;
-    union {
-       struct {
-           uint16_t connHandle;
-           uint16_t valHandle;
-           uint16_t dscHandle;
-       } ble;
-       struct {
-           int sockFd;
-       } dircon;
-    } u;
-} SelChrInfo;
+// Indoor Bike State
+typedef enum IndBikeState {
+    stopped = 0,
+    started = 1,
+    paused = 2,
+} IndBikeState;
 
 // Message direction
 typedef enum MesgDir {
@@ -109,6 +96,9 @@ typedef struct Server {
 #endif
 
     struct timeval baseTime;        // base time used to generate relative timestamps
+    struct timeval nextClkTick;     // time of the next clock tick
+
+    IndBikeState indBikeState;
 
     CpRespInfo cpRespInfo;
 
@@ -119,6 +109,7 @@ typedef struct Server {
     uint32_t rxMdnsMesgCnt;
     uint32_t txMdnsMesgCnt;
 
+    // Ride metrics sent in the CPM/IBD notifications
     uint16_t cadence;               // Cadence [RPM]
     uint16_t heartRate;             // Heart Rate [BPM]
     uint16_t power;                 // Power [Watts]
@@ -150,5 +141,7 @@ extern Service *serverFindService(const Server *server, const Uuid128 *uuid);
 extern Characteristic *serverFindCharacteristicByUuid128(const Server *server, const Uuid128 *uuid);
 
 extern const char *fmtSockaddr(const struct sockaddr_in *sockAddr, bool printPort);
+
+extern const char *fmtIndBikeState(IndBikeState state);
 
 __END_DECLS
