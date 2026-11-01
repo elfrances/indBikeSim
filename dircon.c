@@ -332,6 +332,7 @@ static int dirconSendErrorResp(Server *server, DirconSession *sess, const Dircon
 {
     ReadCharMesg *resp = (ReadCharMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, respCode);
     resp->charUuid = *uuid;
+    resp->hdr.mesgLen = sizeof (resp->charUuid);
 
     return dirconSendMesg(server, sess, response, (DirconMesg *) resp);
 }
@@ -416,6 +417,27 @@ static int dirconProcReadCharacteristicMesg(Server *server, DirconSession *sess,
     resp->charUuid = readChar->charUuid;
     resp->hdr.mesgLen = sizeof (resp->charUuid);
 
+#ifdef CONFIG_DIS
+    char *strVal = (char *) resp->data;
+    if (chr->uuid16 == serialNumber) {
+        // Serial Number
+        strcpy(strVal, disSerialNumber);
+        resp->hdr.mesgLen += (strlen(strVal) + 1);
+    } else if (chr->uuid16 == firmwareRevision) {
+        // Firmware Revision
+        strcpy(strVal, disFirmwareRevision);
+        resp->hdr.mesgLen += (strlen(strVal) + 1);
+    } else if (chr->uuid16 == hardwareRevision) {
+        // Hardware Revision
+        strcpy(strVal, disHardwareRevision);
+        resp->hdr.mesgLen += (strlen(strVal) + 1);
+    } else if (chr->uuid16 == manufacturerName) {
+        // Manufacturer Name
+        strcpy(strVal, disManufacturerName);
+        resp->hdr.mesgLen += (strlen(strVal) + 1);
+    } else
+#endif
+
 #ifdef CONFIG_CPS
     if (chr->uuid16 == sensorLocation) {
         // Sensor Location (GATT Spec Supp 3.209)
@@ -490,6 +512,11 @@ static int dirconProcWriteCharacteristicMesg(Server *server, DirconSession *sess
         const FitMachCP *fmcp = (FitMachCP *) writeChar->data;
         int resultCode = FMCP_RC_SUCCESS;
 
+        if (!sess->fmcpNotificationsEnabled) {
+            //mlog(error, "FMCP notifications NOT enabled!");
+            return dirconSendErrorResp(server, sess, mesg, CharacteristicWriteFailed, &writeChar->charUuid);
+        }
+
         if ((fmcp->opCode != FMCP_REQUEST_CONTROL) && !server->controlGranted) {
             resultCode = FMCP_RC_CONTROL_NOT_PERMITTED;
         } else if (fmcp->opCode == FMCP_REQUEST_CONTROL) {
@@ -557,8 +584,10 @@ static int dirconProcWriteCharacteristicMesg(Server *server, DirconSession *sess
             mlog(info, "Indoor bike state change: %s -> %s", fmtIndBikeState(currIndBikeState), fmtIndBikeState(server->indBikeState));
         }
 
-        // Schedule the NOTIFICATION that follows the WRITE Response
-        schedFmcpNotification(server, chr, fmcp->opCode, resultCode);
+        if (sess->fmcpNotificationsEnabled) {
+            // Schedule the NOTIFICATION that follows the WRITE Response
+            schedFmcpNotification(server, chr, fmcp->opCode, resultCode);
+        }
     } else {
         // Hu?
         resp->hdr.respCode = UnexpectedError;
@@ -593,7 +622,8 @@ static int dirconProcEnableCharacteristicNotificationsMesg(Server *server, Dirco
     bool enable = (enCharNot->enable & 0x01) ? true : false;
     EnCharNotMesg *resp = (EnCharNotMesg *) dirconInitMesg(server, mesg->mesgId, mesg->seqNum, SuccessRequest);
     resp->charUuid = enCharNot->charUuid;
-    resp->enable = enCharNot->enable;
+    //resp->enable = enCharNot->enable;
+    //resp->hdr.mesgLen = enCharNot->hdr.dataLen;
     resp->hdr.mesgLen = sizeof (resp->charUuid);
 
 #ifdef CONFIG_CPS
@@ -644,7 +674,7 @@ int dirconProcMesg(Server *server)
     DirconSession *sess = &server->dirconSession;
     DirconMesg *mesg = (DirconMesg *) server->rxMesgBuf;
     int n, mesgLen;
-    MesgType mesgType;
+    MesgType mesgType = request; // we are a DIRCON server so we only expect requests from the client!
 
     gettimeofday(&sess->rxMesgTimestamp, NULL);
 
@@ -678,45 +708,42 @@ int dirconProcMesg(Server *server)
     }
 
     if (mesg->version != DIRCON_VERSION) {
-        mlog(error, "Unexpected protocol version %u!\n", mesg->version);
-        return -1;
+        mlog(error, "Unsupported protocol version %u !\n", mesg->version);
+        return 0;
     }
 
     if ((mesg->mesgId < DiscoverServices) || (mesg->mesgId > UnsolicitedCharacteristicNotification)) {
-        mlog(error, "Invalid DIRCON message type %u!", mesg->mesgId);
-        return -1;
+        int pduLen = sizeof (DirconMesg) + mesgLen;
+        mlog(error, "Unsupported message: mesgId=%u seqNum=%u respCode=%u pduLen=%u !\n", mesg->mesgId, mesg->seqNum, mesg->respCode, pduLen);
+        if (server->hexDumpMesg) {
+            hexDump(mesg, pduLen);
+        }
+
+        // If it looks like a request, send back a response.
+        // NOTE: we may want to rate-limit these error responses...
+        if (mesg->respCode == SuccessRequest) {
+            mesg->respCode = UnknownMessageType;
+            if (dirconSendMesg(server, sess, response, mesg) != 0) {
+                mlog(error, "Failed to send UnknownMessageType response !");
+            }
+        }
+        return 0;
     }
 
-    // Figure out if this is a request or a response message.
-    // If we have a response pending and the sequence number
-    // matches that of the last request we sent out, then it
-    // is a response message.
-    if (sess->respPend && (mesg->seqNum == sess->lastTxReqSeqNum)) {
-        mesgType = response;
-    } else {
-        mesgType = request;
+    if (mesg->respCode != SuccessRequest) {
+        mlog(warning, "Unsolicited response message: mesgId=%u seqNum=%u respCode=%u mesgLen=%u (lastRxReqSeqNum=%u)",
+                mesg->mesgId, mesg->seqNum, mesg->respCode, mesg->mesgLen, sess->lastRxReqSeqNum);
+        return 0;
     }
 
     sess->rxMesgCnt++;
 
     mesg->mesgLen = mesgLen;
 
-    if (mesgType == request) {
-        mlog(debug, "mesgId=%u seqNum=%u mesgLen=%u", mesg->mesgId, mesg->seqNum, mesg->mesgLen);
-    } else {
-        mlog(debug, "mesgId=%u seqNum=%u respCode=%u mesgLen=%u", mesg->mesgId, mesg->seqNum, mesg->respCode, mesg->mesgLen);
-    }
+    mlog(debug, "mesgId=%u seqNum=%u mesgLen=%u", mesg->mesgId, mesg->seqNum, mesg->mesgLen);
 
     if (server->dissect) {
         dirconDumpMesg(&sess->rxMesgTimestamp, server, sess, RxDir, mesgType, mesg);
-    }
-
-    // We only expect request messages from the virtual cycling
-    // app, so we silently drop any unsolicited response messages.
-    if (mesgType != request) {
-        mlog(warning, "Unsolicited response message: mesgId=%u seqNum=%u respCode=%u mesgLen=%u (lastRxReqSeqNum=%u)",
-                mesg->mesgId, mesg->seqNum, mesg->respCode, mesg->mesgLen, sess->lastRxReqSeqNum);
-        return 0;
     }
 
     // Call the Rx message handler to do the work!

@@ -23,6 +23,7 @@
 #include <stdio.h>
 
 #include "binbuf.h"
+#include "cps.h"
 #include "dircon.h"
 #include "dump.h"
 #include "fmtbuf.h"
@@ -182,11 +183,63 @@ static const char *fmtFitMachCP(const FitMachCP *fmcp, int fmcpLen)
         fmtBufAppend(&fmtBuf, "%s", fmtIndBikeSimParms(ibsp));
     } else if (fmcp->opCode == FMCP_SET_WHEEL_CIRCUMFERENCE) {
         fmtBufAppend(&fmtBuf, "wheelCircumference: %u [mm]\n", getUINT16(fmcp->parm));
-    } else if (parmLen != 0) {
+    } else if (parmLen > 0) {
         fmtBufAppend(&fmtBuf, "parm: ");
         fmtBufHexDump(&fmtBuf, fmcp->parm, parmLen);
         fmtBufAppend(&fmtBuf, "\n");
     }
+
+    return fmtBuf.buf;
+}
+
+static const char *fmtIbdFlags(uint16_t flags)
+{
+    static char buf[256];
+    FmtBuf fmtBuf;
+
+    fmtBufInit(&fmtBuf, buf, sizeof (buf));
+
+    if (!(flags & IBD_MORE_DATA)) {
+        fmtBufAppend(&fmtBuf, "INSTANTANEOUS_SPEED,");
+    }
+    if (flags & IBD_AVERAGE_SPEED) {
+        fmtBufAppend(&fmtBuf, "AVERAGE_SPEED,");
+    }
+    if (flags & IBD_INSTANTANEOUS_CADENCE) {
+        fmtBufAppend(&fmtBuf, "INSTANTANEOUS_CADENCE,");
+    }
+    if (flags & IBD_AVERAGE_CADENCE) {
+        fmtBufAppend(&fmtBuf, "AVERAGE_CADENCE,");
+    }
+    if (flags & IBD_TOTAL_DISTANCE) {
+        fmtBufAppend(&fmtBuf, "TOTAL_DISTANCE,");
+    }
+    if (flags & IBD_RESISTANCE_LEVEL) {
+        fmtBufAppend(&fmtBuf, "RESISTANCE_LEVEL,");
+    }
+    if (flags & IBD_INSTANTANEOUS_POWER) {
+        fmtBufAppend(&fmtBuf, "INSTANTANEOUS_POWER,");
+    }
+    if (flags & IBD_AVERAGE_POWER) {
+        fmtBufAppend(&fmtBuf, "AVERAGE_POWER,");
+    }
+    if (flags & IBD_EXPENDED_ENERGY) {
+        fmtBufAppend(&fmtBuf, "EXPENDED_ENERGY,");
+    }
+    if (flags & IBD_HEART_RATE) {
+        fmtBufAppend(&fmtBuf, "HEART_RATE,");
+    }
+    if (flags & IBD_METABOLIC_EQUIVALENT) {
+        fmtBufAppend(&fmtBuf, "METABOLIC_EQUIVALENT,");
+    }
+    if (flags & IBD_ELAPSED_TIME) {
+        fmtBufAppend(&fmtBuf, "ELAPSED_TIME,");
+    }
+    if (flags & IBD_REMAINING_TIME) {
+        fmtBufAppend(&fmtBuf, "REMAINING_TIME,");
+    }
+
+    fmtBuf.buf[fmtBuf.offset - 1] = '\0';
 
     return fmtBuf.buf;
 }
@@ -201,7 +254,7 @@ static const char *fmtIndoorBikeData(const IndoorBikeData *ibd, size_t ibdLen)
     fmtBufInit(&fmtBuf, buf, sizeof (buf));
     binBufInit(&binBuf, (uint8_t *) ibd->data, (ibdLen - sizeof (ibd->flags)), littleEndian);
 
-    fmtBufAppend(&fmtBuf, "flags: 0x%04x\n", flags);
+    fmtBufAppend(&fmtBuf, "flags: 0x%04hx [%s]\n", flags, fmtIbdFlags(flags));
     if (!(flags & IBD_MORE_DATA)) {
         fmtBufAppend(&fmtBuf, "instSpeed: %.3lf [kph]\n", (binBufGetUINT16(&binBuf) / 100.0));
     }
@@ -244,6 +297,198 @@ static const char *fmtIndoorBikeData(const IndoorBikeData *ibd, size_t ibdLen)
 
     return fmtBuf.buf;
 }
+
+static const char *fmtCpmFlags(uint16_t flags)
+{
+    static char buf[256];
+    FmtBuf fmtBuf;
+
+    fmtBufInit(&fmtBuf, buf, sizeof (buf));
+
+    if (flags & CPM_PEDAL_POWER_BALANCE) {
+        fmtBufAppend(&fmtBuf, "PEDAL_POWER_BALANCE,");
+    }
+    if (flags & CPM_PEDAL_POWER_BALANCE_REFERENCE) {
+        fmtBufAppend(&fmtBuf, "PEDAL_POWER_BALANCE_REFERENCE,");
+    }
+    if (flags & CPM_ACCUMMULATED_TORQUE) {
+        fmtBufAppend(&fmtBuf, "ACCUMMULATED_TORQUE,");
+    }
+    if (flags & CPM_ACCUMMULATED_TORQUE_SOURCE) {
+        fmtBufAppend(&fmtBuf, "ACCUMMULATED_TORQUE_SOURCE,");
+    }
+    if (flags & CPM_WHEEL_REVOLUTION_DATA) {
+        fmtBufAppend(&fmtBuf, "WHEEL_REVOLUTION_DATA,");
+    }
+    if (flags & CPM_CRANK_REVOLUTION_DATA) {
+        fmtBufAppend(&fmtBuf, "CRANK_REVOLUTION_DATA,");
+    }
+    if (flags & CPM_EXTREME_FORCE_MAGNITUDES) {
+        fmtBufAppend(&fmtBuf, "EXTREME_FORCE_MAGNITUDES,");
+    }
+    if (flags & CPM_EXTREME_TORQUE_MAGNITUDES) {
+        fmtBufAppend(&fmtBuf, "EXTREME_TORQUE_MAGNITUDES,");
+    }
+    if (flags & CPM_EXTREME_ANGLES) {
+        fmtBufAppend(&fmtBuf, "EXTREME_ANGLES,");
+    }
+    if (flags & CPM_TOP_DEAD_SPOT_ANGLE) {
+        fmtBufAppend(&fmtBuf, "TOP_DEAD_SPOT_ANGLE,");
+    }
+    if (flags & CPM_BOTTOM_DEAD_SPOT_ANGLE) {
+        fmtBufAppend(&fmtBuf, "BOTTOM_DEAD_SPOT_ANGLE,");
+    }
+    if (flags & CPM_ACCUMMULATED_ENERGY) {
+        fmtBufAppend(&fmtBuf, "ACCUMMULATED_ENERGY,");
+    }
+    if (flags & CPM_OFFSET_COMPENSATION_INDICATOR) {
+        fmtBufAppend(&fmtBuf, "CPM_OFFSET_COMPENSATION_INDICATOR,");
+    }
+
+    fmtBuf.buf[fmtBuf.offset - 1] = '\0';
+
+    return fmtBuf.buf;
+}
+
+// Compute the cadence (in RPM) from the previous and
+// current CrankRevData values.
+uint16_t cadenceFromCrankRevData(const CrankRevData *curr, CrankRevData *prev)
+{
+    uint16_t currCumCrankRevs = getUINT16(curr->cumCrankRevs);
+    uint16_t currLastCrankEvtTime = getUINT16(curr->lastCrankEvtTime);
+    uint16_t prevCumCrankRevs = getUINT16(prev->cumCrankRevs);
+    uint16_t prevLastCrankEvtTime = getUINT16(prev->lastCrankEvtTime);
+    uint16_t cadence = 0;
+
+    //mlog(info, "prev={cumCrankRevs=%hu lastCrankEvtTime=%hu} curr={cumCrankRevs=%hu lastCrankEvtTime=%hu}",
+    //        prevCumCrankRevs, prevLastCrankEvtTime, currCumCrankRevs, currLastCrankEvtTime);
+
+    if ((currCumCrankRevs != prevCumCrankRevs) || (currLastCrankEvtTime != prevLastCrankEvtTime)) {
+        uint32_t revs = currCumCrankRevs;
+        uint32_t time = currLastCrankEvtTime;
+
+        if (currCumCrankRevs < prevCumCrankRevs) {
+            revs += 0x10000;    // adjust for rollover
+        }
+        revs -= prevCumCrankRevs;   // CumCrankRevs delta
+
+        if (currLastCrankEvtTime < prevLastCrankEvtTime) {
+            time += 0x10000;    // adjust for rollover
+        }
+        time -= prevLastCrankEvtTime;   // LastCrankEvtTime delta
+
+        if ((prevCumCrankRevs != 0) && (time != 0)) {
+            cadence = (revs * 60 * 1024) / time;    // time is in 1/1024 second ticks
+        }
+
+        *prev = *curr;  // update the previous value
+    }
+
+    return cadence;
+}
+
+// Compute the speed (in mm/s) from the previous and
+// current WheelRevData values.
+uint16_t speedFromWheelRevData(const WheelRevData *curr, WheelRevData *prev, uint32_t wheelCircumference)
+{
+    uint16_t currCumWheelRevs = getUINT16(curr->cumWheelRevs);
+    uint16_t currLastWheelEvtTime = getUINT16(curr->lastWheelEvtTime);
+    uint16_t prevCumWheelRevs = getUINT16(prev->cumWheelRevs);
+    uint16_t prevLastWheelEvtTime = getUINT16(prev->lastWheelEvtTime);
+    uint16_t speed = 0;
+
+    if ((currCumWheelRevs != prevCumWheelRevs) || (currLastWheelEvtTime != prevLastWheelEvtTime)) {
+        uint32_t revs = currCumWheelRevs;
+        uint32_t time = currLastWheelEvtTime;
+        uint32_t wheelCircumference = 2136; // 700c x 28 [mm]
+
+        if (currCumWheelRevs < prevCumWheelRevs) {
+            revs += 0x10000;    // adjust for rollover
+        }
+        revs -= prevCumWheelRevs;   // CumWheelRevs delta
+
+        if (currLastWheelEvtTime < prevLastWheelEvtTime) {
+            time += 0x10000;    // adjust for rollover
+        }
+        time -= prevLastWheelEvtTime;   // LastWheelEvtTime delta
+
+        if ((prevCumWheelRevs != 0) && (time != 0)) {
+            speed = (revs * wheelCircumference * 2048) / time;  // time is in 1/2048 second ticks
+        }
+
+        *prev = *curr;
+    }
+
+    return speed;   // update the previous value
+}
+
+static const char *fmtCyclingPowerMeasurement(const CycPowerMeas *cpm, size_t cpmLen)
+{
+    static char buf[512];
+    FmtBuf fmtBuf;
+    uint16_t flags = getUINT16(cpm->flags);
+    BinBuf binBuf;
+
+    fmtBufInit(&fmtBuf, buf, sizeof (buf));
+    binBufInit(&binBuf, (uint8_t *) cpm->data, (cpmLen - sizeof (cpm->flags) - sizeof (cpm->instPower)), littleEndian);
+
+    fmtBufAppend(&fmtBuf, "flags: 0x%04hx [%s]\n", flags, fmtCpmFlags(flags));
+    fmtBufAppend(&fmtBuf, "instPower: %d [W]\n", getSINT16(cpm->instPower));
+    if (flags & CPM_PEDAL_POWER_BALANCE) {
+        fmtBufAppend(&fmtBuf, "pedalPowerBal: %.2lf [%%] (%s)\n", (binBufGetUINT8(&binBuf) / 2.0), (flags & CPM_PEDAL_POWER_BALANCE_REFERENCE) ? "left" : "undef");
+    }
+    if (flags & CPM_ACCUMMULATED_TORQUE) {
+        fmtBufAppend(&fmtBuf, "accumTorque: %.3lf [Nm] (%s)\n", (binBufGetUINT16(&binBuf) / 32.0), (flags & CPM_ACCUMMULATED_TORQUE_SOURCE) ? "crank" : "wheel");
+    }
+    if (flags & CPM_WHEEL_REVOLUTION_DATA) {
+        static WheelRevData prevWheelRevData;
+        WheelRevData currWheelRevData;
+        uint32_t cumWheelRevs = binBufGetUINT32(&binBuf);
+        uint16_t lastWheelEvtTime = binBufGetUINT16(&binBuf);
+        putUINT32(currWheelRevData.cumWheelRevs, cumWheelRevs);
+        putUINT16(currWheelRevData.lastWheelEvtTime, lastWheelEvtTime);
+        uint16_t speed = speedFromWheelRevData(&currWheelRevData, &prevWheelRevData, 2136);   // in [mm/s]
+        fmtBufAppend(&fmtBuf, "wheelRevData: %" PRIu32 " [revol], %u [ticks] => %u.%03u [m/s]\n",
+                cumWheelRevs, lastWheelEvtTime,
+                (speed / 1000), (speed % 1000));
+    }
+    if (flags & CPM_CRANK_REVOLUTION_DATA) {
+        static CrankRevData prevCrankRevData;
+        CrankRevData currCrankRevData;
+        uint16_t cumCrankRevs = binBufGetUINT16(&binBuf);
+        uint16_t lastCrankEvtTime = binBufGetUINT16(&binBuf);
+        putUINT16(currCrankRevData.cumCrankRevs, cumCrankRevs);
+        putUINT16(currCrankRevData.lastCrankEvtTime, lastCrankEvtTime);
+        fmtBufAppend(&fmtBuf, "crankRevData: %u [revol], %u [ticks] => %u [rpm]\n",
+                cumCrankRevs, lastCrankEvtTime,
+                cadenceFromCrankRevData(&currCrankRevData, &prevCrankRevData));
+    }
+    if (flags & CPM_EXTREME_FORCE_MAGNITUDES) {
+        int16_t maxForceMagnitude = binBufGetUINT16(&binBuf);
+        int16_t minForceMagnitude = binBufGetUINT16(&binBuf);
+        fmtBufAppend(&fmtBuf, "maxForce: %d [N]\n", maxForceMagnitude);
+        fmtBufAppend(&fmtBuf, "minForce: %d [N]\n", minForceMagnitude);
+    }
+    if (flags & CPM_EXTREME_TORQUE_MAGNITUDES) {
+        int16_t maxTorqueMagnitude = binBufGetUINT16(&binBuf);
+        int16_t minTorqueMagnitude = binBufGetUINT16(&binBuf);
+        fmtBufAppend(&fmtBuf, "maxTorque: %.3lf [Nm]\n", maxTorqueMagnitude / 32.0);
+        fmtBufAppend(&fmtBuf, "minTorque: %.3lf [Nm]\n", minTorqueMagnitude / 32.0);
+    }
+    if (flags & CPM_EXTREME_ANGLES) {
+        uint32_t extremeAngles = binBufGetUINT24(&binBuf);
+        fmtBufAppend(&fmtBuf, "maxAngle: %u [deg]\n", (extremeAngles & 0x000fff));
+        fmtBufAppend(&fmtBuf, "minAngle: %u [deg]\n", (extremeAngles >> 12));
+    }
+    // TBD:
+    //   CPM_TOP_DEAD_SPOT_ANGLE
+    //   CPM_BOTTOM_DEAD_SPOT_ANGLE
+    //   CPM_ACCUMMULATED_ENERGY
+    //   CPM_OFFSET_COMPENSATION_INDICATOR
+
+    return fmtBuf.buf;
+}
+
 
 void hexDump(const void *pBuf, int bufLen)
 {
@@ -308,7 +553,7 @@ static void dumpReadCharacteristicMesg(const DirconMesg *pMesg, int mesgLen, Mes
     const ReadCharMesg *mesg = (ReadCharMesg *) pMesg;
     fmtBufAppend(fmtBuf, "charUUID: %s (%s)\n", fmtUuid128(&mesg->charUuid), fmtUuid128Name(&mesg->charUuid));
 
-    if (mesgType == response) {
+    if ((mesgType == response) && (pMesg->respCode == SuccessRequest)) {
         uint16_t uuid16 = uuid128ToUint16(&mesg->charUuid);
         size_t dataLen = (mesgLen - sizeof (Uuid128));
 
@@ -378,7 +623,11 @@ static void dumpUnsolicitedCharacteristicNotificationMesg(const DirconMesg *pMes
     size_t dataLen = (mesgLen - sizeof (Uuid128));
 
     fmtBufAppend(fmtBuf, "charUUID: %s (%s)\n", fmtUuid128(&mesg->charUuid), fmtUuid128Name(&mesg->charUuid));
-    if (uuid16 == indoorBikeData) {
+    if (uuid16 == cyclingPowerMeasurement) {
+        // Cycling Power Measurement
+        const CycPowerMeas *cpm = (CycPowerMeas *) mesg->data;
+        fmtBufAppend(fmtBuf, "%s", fmtCyclingPowerMeasurement(cpm, dataLen));
+    } else if (uuid16 == indoorBikeData) {
         // Indoor Bike Data
         const IndoorBikeData *ibd = (IndoorBikeData *) mesg->data;
         fmtBufAppend(fmtBuf, "%s", fmtIndoorBikeData(ibd, dataLen));

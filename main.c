@@ -54,6 +54,10 @@ static const char *help =
         "        Specifies the FIT file of the cycling activity to be used to\n"
         "        get the metrics sent in the 'Indoor Bike Data' notification\n"
         "        messages.\n"
+        "    --auto-enable-fmcp-notifications\n"
+        "        Auto-enable FTMS FMCP notifications upon start up, to avoid\n"
+        "        failing FMCP writes from client app's (like FulGaz) which do\n"
+        "        not enable them.\n"
         "    --cadence <val>\n"
         "        Specifies a fixed cadence value (in RPM) to be sent in the\n"
         "        periodic 'Cycling Power Measurement' and 'Indoor Bike Data'\n"
@@ -149,6 +153,8 @@ static int parseArgs(int argc, char **argv, Server *server)
 #else
             return invalidArgument(arg, NULL);
 #endif
+        } else if (strcmp(arg, "--auto-enable-fmcp-notifications") == 0) {
+            server->autoEnableFmcpNotifications = true;
         } else if (strcmp(arg, "--cadence") == 0) {
             uint16_t cadence;
             if ((val = argv[++n]) == NULL) {

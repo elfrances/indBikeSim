@@ -127,12 +127,19 @@ typedef struct Server {
     int dissectMesgId;
 
     bool actInProg;                 // activity in progress
+    bool autoEnableFmcpNotifications;
     bool controlGranted;
     bool dissect;
     bool exit;
     bool hexDumpMesg;
     bool noMdns;
 } Server;
+
+extern const char *disModelNumber;
+extern const char *disSerialNumber;
+extern const char *disFirmwareRevision;
+extern const char *disHardwareRevision;
+extern const char *disManufacturerName;
 
 __BEGIN_DECLS
 

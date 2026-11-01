@@ -213,6 +213,16 @@ static int parseFitFile(Server *server)
 }
 #endif  // CONFIG_FIT_ACTIVITY_FILE
 
+#ifdef CONFIG_DIS
+// Set the variable to NULL to exclude it from
+// the Device Information Service.
+const char *disModelNumber = "noBLE-NNNN";// must match the device name sent in the mDNS advertisement!
+const char *disSerialNumber = "123456789"; // must match the serial-number sent in the mDNS TXT record!
+const char *disFirmwareRevision = "0.0";
+const char *disHardwareRevision = "0.0";
+const char *disManufacturerName = "Choripan Systems";
+#endif
+
 Service *serverAddService(Server *server, const Uuid128 *uuid)
 {
     Service *svc = svcNew(uuid);
@@ -255,6 +265,61 @@ Characteristic *serverFindCharacteristicByUuid128(const Server *server, const Uu
     return NULL;
 }
 
+#ifdef CONFIG_DIS
+static int serverCreateDeviceInformationService(Server *server)
+{
+    Uuid128 uuid128;
+    Service *dis;
+
+    uint16ToUuid128(&uuid128, deviceInfoService);
+    if ((dis = serverAddService(server, &uuid128)) == NULL) {
+        mlog(error, "Failed to create DIS!");
+        return -1;
+    }
+
+    if (disModelNumber != NULL) {
+        uint16ToUuid128(&uuid128, modelNumber);
+        if (svcAddChar(dis, &uuid128, DIRCON_CHAR_PROP_READ) == NULL) {
+            mlog(error, "Failed to create Model Number characteristic!");
+            return -1;
+        }
+    }
+
+    if (disSerialNumber != NULL) {
+        uint16ToUuid128(&uuid128, serialNumber);
+        if (svcAddChar(dis, &uuid128, DIRCON_CHAR_PROP_READ) == NULL) {
+            mlog(error, "Failed to create Serial Number characteristic!");
+            return -1;
+        }
+    }
+
+    if (disFirmwareRevision != NULL) {
+        uint16ToUuid128(&uuid128, firmwareRevision);
+        if (svcAddChar(dis, &uuid128, DIRCON_CHAR_PROP_READ) == NULL) {
+            mlog(error, "Failed to create Firmware Revision characteristic!");
+            return -1;
+        }
+    }
+
+    if (disHardwareRevision != NULL) {
+        uint16ToUuid128(&uuid128, hardwareRevision);
+        if (svcAddChar(dis, &uuid128, DIRCON_CHAR_PROP_READ) == NULL) {
+            mlog(error, "Failed to create Hardware Revision characteristic!");
+            return -1;
+        }
+    }
+
+    if (disManufacturerName != NULL) {
+        uint16ToUuid128(&uuid128, manufacturerName);
+        if (svcAddChar(dis, &uuid128, DIRCON_CHAR_PROP_READ) == NULL) {
+            mlog(error, "Failed to create Manufacturer Name characteristic!");
+            return -1;
+        }
+    }
+
+    return 0;
+}
+#endif
 
 #ifdef CONFIG_CPS
 static int serverCreateCyclingPowerService(Server *server)
@@ -329,6 +394,16 @@ static int serverCreateFitnessMachineService(Server *server)
     if (svcAddChar(ftms, &uuid128, DIRCON_CHAR_PROP_NOTIFY) == NULL) {
         mlog(error, "Failed to create Fitness Machine Status characteristic!");
         return -1;
+    }
+
+    if (server->autoEnableFmcpNotifications) {
+        // FulGaz 6.x does NOT enable FMCP notifications before it
+        // starts to write OpCode's on the FMCP characteristic. Section
+        // 4.16.3 of the FTMS Specification v1.0.1 clearly states that
+        // this is NOT allowed and that the write operation should FAIL.
+        // This issue can be avoided by letting noBLE auto-enable FMCP
+        // notifications when it initializes the trainer.
+        server->dirconSession.fmcpNotificationsEnabled = true;
     }
 
     return 0;
@@ -522,6 +597,14 @@ int serverInit(Server *server)
     // Start the notification timer with a 1-sec expiry
     server->dirconSession.nextClkTick = server->baseTime;
     server->dirconSession.nextClkTick.tv_sec++;
+
+#ifdef CONFIG_DIS
+    // Create the DIS instance
+    if (serverCreateDeviceInformationService(server) != 0) {
+        mlog(error, "Failed to create DIS!");
+        return -1;
+    }
+#endif
 
 #ifdef CONFIG_CPS
     // Create the CPS instance

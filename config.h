@@ -25,6 +25,9 @@
 // Command Line Interface: adds an interactive CLI helpful for debugging
 #undef CONFIG_CLI
 
+// Device Information Service: adds support for DIS
+#define CONFIG_DIS
+
 // Cycling Power Service: adds support for CPS in addition to FTMS
 #define CONFIG_CPS
 

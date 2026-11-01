@@ -88,6 +88,18 @@ typedef struct CycPowerMeas CycPowerMeas;
 #define CPM_OFFSET_COMPENSATION_INDICATOR   bitMask(12)
 #define CPM_RFU                             0xE000U     // bits 13-15
 
+struct WheelRevData {
+    uint8_t cumWheelRevs[4];        // UINT32: cumulative wheel revolutions
+    uint8_t lastWheelEvtTime[2];    // UINT16: last wheel event time [1/2048 s]
+} __attribute__((packed));
+typedef struct WheelRevData WheelRevData;
+
+struct CrankRevData {
+    uint8_t cumCrankRevs[2];        // UINT16: cumulative crank revolutions
+    uint8_t lastCrankEvtTime[2];    // UINT16: last crank event time [1/1024 s]
+} __attribute__((packed));
+typedef struct CrankRevData CrankRevData;
+
 // Sensor Location (GATT Spec Supp 3.195)
 //
 // The Sensor Location characteristic is used to represent the location of the sensor.
